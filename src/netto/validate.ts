@@ -47,7 +47,8 @@ export interface ValidatedInput {
   childrenUnder25: number;
   elterneigenschaft: boolean;
   age23Plus: boolean;
-  fullKinderfreibetrag: boolean;
+  /** Resolved Zähler (default already applied). */
+  kfbZaehler: number;
   kvType: KvType;
   zusatzbeitrag: Decimal;
   pkvPremiumMonthly: Decimal;
@@ -130,11 +131,38 @@ export function validateInput(input: YearInput): { ok: true; value: ValidatedInp
   });
 
   const children = input.childrenUnder25;
-  if (!Number.isInteger(children) || children < 0 || children > CONSTANTS.maxChildrenInput) {
+  const childrenOk = Number.isInteger(children) && children >= 0 && children <= CONSTANTS.maxChildrenInput;
+  if (!childrenOk) {
     errors.push({
       field: 'childrenUnder25',
       message: `Die Zahl der Kinder muss eine ganze Zahl zwischen 0 und ${CONSTANTS.maxChildrenInput} sein.`,
     });
+  }
+
+  // Kinderfreibetrag-Zähler: default = children × (married ? 1.0 : 0.5).
+  // Max = children × 1.0: one person receives at most the full KFB per child.
+  const defaultZaehler = childrenOk ? children * (input.married ? 1 : 0.5) : 0;
+  const maxZaehler = childrenOk ? children : 0;
+  let kfbZaehler = defaultZaehler;
+  if (input.kfbZaehler !== undefined) {
+    const raw = input.kfbZaehler;
+    let parsed: Decimal | null = null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      parsed = d(raw);
+    }
+    const isStep = parsed !== null && parsed.mod(d('0.5')).eq(0);
+    const inRange = parsed !== null && parsed.gte(0) && parsed.lte(maxZaehler);
+    if (parsed === null || !isStep || !inRange) {
+      errors.push({
+        field: 'kfbZaehler',
+        message:
+          maxZaehler === 0
+            ? 'Der Kinderfreibetrag-Zähler muss 0 sein, wenn keine Kinder unter 25 angegeben sind.'
+            : `Der Kinderfreibetrag-Zähler muss ein Vielfaches von 0,5 zwischen 0 und ${String(maxZaehler).replace('.', ',')} sein.`,
+      });
+    } else {
+      kfbZaehler = parsed.toNumber();
+    }
   }
 
   const bundesland = input.bundesland ?? DEFAULT_BUNDESLAND;
@@ -277,7 +305,7 @@ export function validateInput(input: YearInput): { ok: true; value: ValidatedInp
       childrenUnder25: children,
       elterneigenschaft: input.elterneigenschaft,
       age23Plus: input.age23Plus,
-      fullKinderfreibetrag: input.married ? true : input.fullKinderfreibetrag,
+      kfbZaehler,
       kvType,
       zusatzbeitrag,
       pkvPremiumMonthly,

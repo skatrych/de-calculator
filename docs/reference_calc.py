@@ -258,9 +258,15 @@ def calculate(inp: dict, verbose=True):
     married = inp.get('married', False)
     spouse = d(inp.get('spouse_zve', 0))
     church = d(inp.get('church', 0))  # 0, 0.08, 0.09
-    children = inp.get('children', 0)  # under 25 for PV; also used for KFB count
-    children_kfb = inp.get('children_kfb', children)  # children for tax KFB
-    kfb_full = inp.get('kfb_full', married)  # full 2-parent KFB
+    children = inp.get('children', 0)  # under 25 for PV
+    # Kinderfreibetrag-Zähler (SPEC v1.3). Default: children × (1.0 if married else 0.5).
+    if 'kfb_zaehler' in inp:
+        kfb_zaehler = D(str(inp['kfb_zaehler']))
+    else:
+        # Backward compatible with children_kfb / kfb_full if a caller still passes them.
+        children_kfb = inp.get('children_kfb', children)
+        kfb_full = inp.get('kfb_full', married)
+        kfb_zaehler = D(children_kfb) * (D(1) if (married or kfb_full) else D('0.5'))
     age23 = inp.get('age23', True)
     kv_type = inp.get('kv_type', 'gkv_ermaessigt')  # gkv_ermaessigt, gkv_allgemein, pkv
     zusatz = d(inp.get('zusatz', p['zusatz']))
@@ -451,10 +457,7 @@ def calculate(inp: dict, verbose=True):
         log("WARNING: KiSt did not converge")
 
     # --- Soli, possibly with Kinderfreibetrag ---
-    kfb = D(0)
-    if children_kfb > 0:
-        per = p['kfb_both'] if (married or kfb_full) else p['kfb_one']
-        kfb = per * children_kfb
+    kfb = p['kfb_both'] * kfb_zaehler if kfb_zaehler > 0 else D(0)
     # fictitious zve for Soli
     if kfb > 0:
         sa = max(pausch, other_sa + kist)
