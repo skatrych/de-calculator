@@ -214,6 +214,62 @@ try {
     console.log('Age field: ok (new label, above children, hint + aria-describedby)');
   }
 
+  // --- Issue #5: empty / whitespace Zähler, blur refills default ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await openSingle(page);
+    await page.fill('#gewinn-2026', '80.000');
+    await page.selectOption('#children', '2');
+    await page.waitForSelector('#kfb-wrap:not(.is-hidden)');
+    await page.waitForSelector('.headline .amount');
+    const defaultValue = await page.inputValue('#kfb-zaehler');
+    assert(defaultValue === '1', `issue 5: default for 2 unmarried children should be 1, got ${defaultValue}`);
+    const defaultNetto = (await page.locator('.headline .amount').innerText()).replace(/\s/g, '');
+
+    // Clear, leave empty, then blur: field must show the default, Netto unchanged.
+    await page.fill('#kfb-zaehler', '');
+    assert((await page.inputValue('#kfb-zaehler')) === '', 'issue 5: field should be blank before blur');
+    await page.locator('#kfb-zaehler').blur();
+    const afterEmpty = await page.inputValue('#kfb-zaehler');
+    assert(afterEmpty === '1', `issue 5: after empty + blur, field should show default 1, got ${afterEmpty}`);
+    await page.waitForSelector('.headline .amount');
+    const afterEmptyNetto = (await page.locator('.headline .amount').innerText()).replace(/\s/g, '');
+    assert(
+      afterEmptyNetto === defaultNetto,
+      `issue 5: Netto after empty+blur should match the default case (${defaultNetto}), got ${afterEmptyNetto}`,
+    );
+
+    // Whitespace-only, then blur: same refill.
+    await page.fill('#kfb-zaehler', '   ');
+    await page.locator('#kfb-zaehler').blur();
+    const afterWs = await page.inputValue('#kfb-zaehler');
+    assert(afterWs === '1', `issue 5: after whitespace + blur, field should show default 1, got ${afterWs}`);
+    const afterWsNetto = (await page.locator('.headline .amount').innerText()).replace(/\s/g, '');
+    assert(
+      afterWsNetto === defaultNetto,
+      `issue 5: Netto after whitespace+blur should match the default case, got ${afterWsNetto}`,
+    );
+
+    // Dirty flag is cleared, so changing children updates the Zähler again.
+    await page.selectOption('#children', '3');
+    await page.waitForSelector('#kfb-wrap:not(.is-hidden)');
+    const afterKids = await page.inputValue('#kfb-zaehler');
+    assert(afterKids === '1.5', `issue 5: after blur-reset, raising children to 3 should auto-follow to 1.5, got ${afterKids}`);
+    await page.waitForSelector('.headline .amount');
+    const afterKidsNetto = (await page.locator('.headline .amount').innerText()).replace(/\s/g, '');
+    assert(
+      afterKidsNetto !== defaultNetto,
+      `issue 5: Netto should update when children (and default Zähler) change, still ${afterKidsNetto}`,
+    );
+
+    const errHidden = await page.locator('#form-errors').getAttribute('hidden');
+    assert(errHidden !== null, 'issue 5: no error state after empty blur');
+
+    await page.close();
+    console.log('Issue 5: ok (empty and whitespace blur refill the default; children changes auto-follow again)');
+  }
+
   // Desktop form screenshot for the PR
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
@@ -235,7 +291,7 @@ try {
 
   await browser.close();
   server.close();
-  console.log('\ncheck:ui: ok (L1, L2, age-field placement).');
+  console.log('\ncheck:ui: ok (L1, L2, age-field placement, issue 5 empty Zähler).');
 } catch (err) {
   console.error('check:ui FAILED:', err);
   process.exit(1);
