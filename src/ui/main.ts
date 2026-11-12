@@ -811,6 +811,17 @@ function init(): void {
     if (event.target === kfbInput) kfbZaehlerTouched = true;
     recalc();
   });
+  // Issue #5: an empty (or whitespace-only) Zähler silently used the
+  // default while the field stayed blank. On blur, refill the current
+  // default and resume auto-follow.
+  kfbInput.addEventListener('blur', () => {
+    if (kfbInput.value.trim() !== '') return;
+    kfbZaehlerTouched = false;
+    const nChildren = Number(children.value);
+    const married = (document.getElementById('married') as HTMLInputElement).checked;
+    kfbInput.value = formatKfbZaehler(defaultKfbZaehler(nChildren, married));
+    recalc();
+  });
   form.addEventListener('change', (event) => {
     const t = event.target;
     if (
