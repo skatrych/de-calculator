@@ -1,8 +1,9 @@
 # SPEC: Netto-Einkommen für Selbständige (Germany)
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-11-12  
 **Status:** Authoritative specification for implementation and QA.  
+**v1.2 changes:** Kirchensteuer uses the same fictitious ESt with Kinderfreibeträge as the Solidaritätszuschlag (§ 51a Abs. 2 EStG); new golden case G19. In multi-year mode, Effektive Grenzbelastung is shown per year only and is not averaged. Existing goldens G1–G18 and M1–M4 are unchanged.  
 **Supported tax years:** 2023, 2024, 2025 and 2026.  
 **Default mode:** three consecutive closed years (as of this date: 2023–2025), each computed with that year’s own legal parameters, then averaged. Single-year mode remains available.  
 **Product:** a usable static web app (German UI) that estimates the annual and monthly net income of a self-employed person under current German tax and social-insurance law, including the three-year average that courts and (typically) banks use as the representative figure.
@@ -170,7 +171,7 @@ All money values in EUR with two decimals (income tax itself is a whole euro, di
 | Tarifliche ESt | Tarifliche Einkommensteuer | Before § 35. |
 | Deductible Vorsorge | Abziehbare Vorsorgeaufwendungen | Informational. |
 | Effective burden | Effektive Gesamtbelastung | (Gewinn − Netto) / Gewinn × 100, two decimals. Undefined if Gewinn is 0; show „—“. In multi-year mode, (average burden) / (average Gewinn). |
-| Marginal burden | Effektive Grenzbelastung | [TotalBurden(Gewinn+100) − TotalBurden(Gewinn)] / 100, as a percentage with two decimals. Re-run the **entire** pipeline at Gewinn+100. Using +100 € avoids one-euro rounding noise. |
+| Marginal burden | Effektive Grenzbelastung | [TotalBurden(Gewinn+100) − TotalBurden(Gewinn)] / 100, as a percentage with two decimals. Re-run the **entire** pipeline at Gewinn+100. Using +100 € avoids one-euro rounding noise. In **multi-year mode**, show this **per year** (on each year card). Do **not** average the three Grenzbelastungen and do **not** show a Grenzbelastung on the average block. |
 | Statutory marginal rate | Tariflicher Grenzsteuersatz | 0 / 14–23.97 % / 23.97–42 % / 42 % / 45 %, according to the zone of the final (user, or half-of-joint) zvE. Informational. |
 | Assessment bases | Beitragsbemessung KV/PV, RV | Shown in the breakdown so the user sees a clamp to the minimum or the BBG. |
 
@@ -345,7 +346,7 @@ pausch = 72 if married else 36
 
 **Known simplification:** if the user enters a pre-computed spouse zvE that already includes the spouse’s 36 € Pauschbetrag, applying 72 € on the user’s side can over-deduct 36 €. When spouse zvE is 0, 72 € is correct.
 
-Kirchensteuer is a percentage of **festzusetzende ESt** (after § 35), not including Soli, and is itself a deductible Sonderausgabe. That is circular. Iterate to a fixed point:
+Kirchensteuer is a percentage of **`fest_soli`** (Section 6.9: the same fictitious ESt that Soli uses, after § 35), not including Soli, and is itself a deductible Sonderausgabe. That is circular. Iterate to a fixed point:
 
 ```
 kist = 0
@@ -360,7 +361,8 @@ repeat up to 30 times:
         est  = tariff(zve, year)
     credit = gewerbesteuer_credit(est, …)         # § 35, Section 6.8; 0 if Freiberufler
     fest   = max(0, est - credit)                 # may have cents if the credit has cents
-    kist_new = commercial_round_cents(kist_rate × fest)   if church member else 0
+    kist_new = commercial_round_cents(kist_rate × fest_soli)   if church member else 0
+    # fest_soli: same fictitious ESt as Soli (Section 6.9); equals fest when children = 0
     stop when kist_new == kist
     kist = kist_new
 ```
@@ -416,7 +418,7 @@ else:
 
 The Milderungszone ends when `0.055 × ESt = 0.119 × (ESt − Freigrenze)`, i.e. at `ESt = Freigrenze × 11.9/6.4 = Freigrenze × 1.859375`. For 2026 single: 37,838.28125 € of ESt. Above that, the full 5.5 % applies.
 
-**Assessment base `fest_soli`:** SolzG § 3 Abs. 2 requires the ESt that **would** be assessed if Kinderfreibeträge after § 32 Abs. 6 were always deducted. Kindergeld is ignored here.
+**Assessment base `fest_soli`:** SolzG § 3 Abs. 2 (Soli) and § 51a Abs. 2 EStG (KiSt) require the ESt that **would** be assessed if Kinderfreibeträge after § 32 Abs. 6 were always deducted. Kindergeld is ignored here. This is the same fictitious ESt for both surcharges.
 
 ```
 kfb_per_child = (both-parents amount if married or „voller Kinderfreibetrag“ else one-parent amount)
@@ -428,7 +430,13 @@ zve_soli      = floor_euro(Gewinn - vorsorge - sa - kfb)    # not below 0; sa as
 
 If there are no children, `fest_soli = fest` (the real festzusetzende ESt, after § 35).
 
-KiSt uses the same fictitious Kinderfreibetrag reduction of the tax base in the official Land rules; for v1 apply it to Soli as above, and also compute KiSt on a fictitious `fest` that uses `zve_soli` **instead of** `zve` when children > 0, inside the same iteration (sa still uses the real KiSt). If this coupling is implemented, the golden tests in Section 11 that have both KiSt and children must be recomputed and the SPEC updated; **v1 golden tests never combine KiSt with children**, so implementing KiSt-on-fictitious-ESt is optional and must not change the published golden cases. Minimum requirement: Kinderfreibetrag on the **Soli** base.
+**KiSt uses this same fictitious `fest_soli` as its assessment base**, not the real festzusetzende ESt. Compute it inside the Section 6.7 iteration:
+
+```
+kist_new = commercial_round_cents(kist_rate × fest_soli)   if church member else 0
+```
+
+`fest_soli` is recomputed each iteration from the current `sa` (and therefore from the current cash KiSt). The Sonderausgaben deduction `sa` still uses the real (cash) KiSt. When children = 0, `fest_soli = fest` and the published cases G8 and G18 are unchanged. When children > 0 and the user pays KiSt, this coupling is required; golden case **G19** covers it.
 
 ### 6.10 Netto and rates
 
@@ -463,7 +471,7 @@ avg_monthly   = commercial_round_cents(avg_netto / 12)
 avg_effective = avg(total_burden) / avg(Gewinn) × 100
 ```
 
-Also average each cash-outflow line. Reject a list that is not three consecutive supported years (2023–2026). The core does not invent a “blended” tariff: there is no such legal object.
+Also average each cash-outflow line. Do **not** form an average Grenzbelastung: each year’s `YearResult` already carries its own `marginal_%` from Section 6.10, and the UI shows it on that year’s card only. Reject a list that is not three consecutive supported years (2023–2026). The core does not invent a “blended” tariff: there is no such legal object.
 
 ### 6.12 Steuerbescheid override
 
@@ -687,7 +695,6 @@ Sources: SVBezGrV 2023, <https://www.gesetze-im-internet.de/svbezgrv_2023/>; SVB
 No legal parameter in the tables above (including Section 7.10) is marked UNVERIFIED. The following are **specified product rules**, not unverified law:
 
 - Kirchensteuer rounding: commercially to cents. Some Länder round to a whole euro; a 1-euro difference is possible.
-- KiSt combined with Kinderfreibetrag is not in the golden tests (Section 6.9).
 - Spouse-zvE simplifications (Sections 4 and 6.7).
 - 2025 voluntary RV min 103.42 € is computed from the same official method DRV publishes for 2026, not from a separate 2025 DRV press line. The 2023 (96.72 €) and 2024 (100.07 €) minima use the same method.
 - **2023 PV annualisation:** equal calendar halves (6/12 + 6/12) for a full-year insured person (Section 6.4). Mid-year start of insurance or a mid-year change in the number of children is out of scope.
@@ -1137,7 +1144,23 @@ Inputs: G14 plus Kirchensteuer 8 %. Converges at zvE 64,017, ESt **15,810**, KiS
 
 **Expected:** ESt 15,810; KiSt 1,264.80; Burden 31,792.05; **Netto 48,207.95**; monthly 4,017.33; effective 39.74 %.
 
-The required set is **G1–G16** (16 cases). G17 and G18 are recommended. Together they cover: GKV minimum, profit above BBG, Gewerbe below and above the Freibetrag, residual GewSt above 400 %, married Splitting (spouse 0 and spouse with income), Soli Milderungszone, Soli at 5.5 %, Soli with Kinderfreibetrag, church tax 8 % and 9 %, childless and with children, PKV, 2025 vs 2026, the 4 % Krankengeld cut, mandatory RV, and non-deductible AV.
+#### G19 — KiSt 9 % with Kinderfreibetrag (2026)
+
+Inputs: G16 facts (Gewinn **120,000**, Kinder unter 25 = **2**, unmarried, one-parent KFB = 2 × 4,878 = **9,756**) plus Kirchensteuer **9 %** (NRW). Social contributions are unchanged from G16 (already at the KV/PV-BBG): KV **11,787.75**; PV rate 3.35 %, PV = 69,750 × 0.0335 = 2,336.625 → **2,336.63**; Vorsorge **14,124.38**.
+
+KiSt is 9 % of the fictitious ESt (Kinderfreibeträge deducted, § 51a Abs. 2 EStG), not of the real festzusetzende ESt. `sa` uses the cash KiSt. All zvE values in this case fall in zone 4 of 2026: `tariff(x) = floor(0.42 × x − 11,135.63)`. Iteration (`sa = max(36, KiSt)`):
+
+1. `sa = 36`. zvE = floor(120,000 − 14,124.38 − 36) = **105,839**; ESt raw = 0.42 × 105,839 − 11,135.63 = 33,316.75 → **33,316**. `zve_soli` = floor(120,000 − 14,124.38 − 36 − 9,756) = **96,083**; `fest_soli` raw = 0.42 × 96,083 − 11,135.63 = 29,219.23 → **29,219**. KiSt = commercial(0.09 × 29,219) = **2,629.71**.
+2. `sa = 2,629.71`. zvE = floor(120,000 − 14,124.38 − 2,629.71) = **103,245**; ESt raw = 0.42 × 103,245 − 11,135.63 = 32,227.27 → **32,227**. `zve_soli` = **93,489**; `fest_soli` raw = 0.42 × 93,489 − 11,135.63 = 28,129.75 → **28,129**. KiSt = commercial(0.09 × 28,129) = **2,531.61**.
+3. `sa = 2,531.61`. zvE = **103,344**; ESt raw = 0.42 × 103,344 − 11,135.63 = 32,268.85 → **32,268**. `zve_soli` = **93,588**; `fest_soli` raw = 0.42 × 93,588 − 11,135.63 = 28,171.33 → **28,171**. KiSt = commercial(0.09 × 28,171) = **2,535.39**.
+4. `sa = 2,535.39`. zvE = floor(120,000 − 14,124.38 − 2,535.39) = **103,340**; ESt raw = 0.42 × 103,340 − 11,135.63 = 32,267.17 → **32,267**. `zve_soli` = **93,584**; `fest_soli` raw = 0.42 × 93,584 − 11,135.63 = 28,169.65 → **28,169**. KiSt = commercial(0.09 × 28,169) = **2,535.21**.
+5. `sa = 2,535.21`. Same zvE **103,340**, ESt **32,267**, `fest_soli` **28,169**, KiSt **2,535.21**. Converged.
+
+Soli on the same fictitious ESt 28,169 (Freigrenze 20,350, Milderung): 0.055 × 28,169 = 1,549.295; 0.119 × (28,169 − 20,350) = 0.119 × 7,819 = 930.461 → **930.46**. A 9 % KiSt on the *real* ESt 32,267 would have been 2,904.03.
+
+Burden = 11,787.75 + 2,336.63 + 32,267 + 930.46 + 2,535.21 = **49,857.05**. **Netto 70,142.95**; monthly = commercial(70,142.95 / 12) = **5,845.25**; effective = commercial(49,857.05 / 120,000 × 100) = **41.55 %**.
+
+The required set is **G1–G16** and **G19** (17 cases). G17 and G18 are recommended. Together they cover: GKV minimum, profit above BBG, Gewerbe below and above the Freibetrag, residual GewSt above 400 %, married Splitting (spouse 0 and spouse with income), Soli Milderungszone, Soli at 5.5 %, Soli with Kinderfreibetrag, church tax 8 % and 9 %, church tax combined with Kinderfreibetrag (§ 51a Abs. 2), childless and with children, PKV, 2025 vs 2026, the 4 % Krankengeld cut, mandatory RV, and non-deductible AV.
 
 ### 11.3 Other tests the developer must include
 
@@ -1205,7 +1228,7 @@ Same personal facts, Rechtskreis West.
 ## 12. Known limitations (document in the UI help)
 
 1. Other income (Kapital, Vermietung) is not in the KV/PV base; the Steuerbescheid would include it.
-2. No Kindergeld and no Günstigerprüfung against Kinderfreibetrag for tarifliche ESt. Soli (required) and optionally KiSt use the Kinderfreibetrag. High earners with children may see a slightly high ESt.
+2. No Kindergeld and no Günstigerprüfung against Kinderfreibetrag for tarifliche ESt. Soli (SolzG § 3 Abs. 2) and KiSt (§ 51a Abs. 2 EStG) both use the Kinderfreibetrag on the same fictitious ESt. High earners with children may see a slightly high ESt.
 3. Spouse zvE is a simplified joint assessment (Sections 4 and 6.7).
 4. No GewSt Hinzurechnungen; Gewerbeertrag = Gewinn.
 5. Kirchensteuer rounding may differ by Land by about 1 €.
@@ -1232,7 +1255,7 @@ No other calculators. When that work starts, give it its own core and a short SP
 
 - Implement the pipeline in Section 6 exactly. If a golden-test expected value and a correct implementation of the pipeline ever disagree, stop and raise it — do not “fix” the test silently, and do not change the legal formulae to match a rounded guess.
 - `reference_calc.py` in this folder is a research aid that produced Section 11. The product is TypeScript. If the script and this SPEC ever disagree, **this SPEC wins**.
-- QA: run Vitest, including every golden case in Sections 11.2 and 11.4 and the isolated tariff table (now for 2023–2026); manually spot-check Section 11.1 against the BMF calculator; walk through G1, G2, G4, G6, G8, G10, G14 and **M1–M4** in the UI (annual and monthly, three-year average labelled as in Section 1.1, disclaimer present, defaults, mobile width); confirm GitHub Pages builds as a static site.
+- QA: run Vitest, including every golden case in Sections 11.2 and 11.4 and the isolated tariff table (now for 2023–2026); manually spot-check Section 11.1 against the BMF calculator; walk through G1, G2, G4, G6, G8, G10, G14, G19 and **M1–M4** in the UI (annual and monthly, three-year average labelled as in Section 1.1, disclaimer present, defaults, mobile width); confirm GitHub Pages builds as a static site.
 - QA **privacy** (release blocker): the five acceptance checks in the Privacy section — zero network requests after the initial page load, empty storage after use, no form values in the URL, CSP and Referrer-Policy present, German privacy note visible.
 - Do not contact tax offices, and do not present results as advice.
 

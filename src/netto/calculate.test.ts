@@ -393,6 +393,92 @@ describe('G18 — 8 % church tax (Bayern / BW) (2026)', () => {
   });
 });
 
+/**
+ * G19 — KiSt 9 % with Kinderfreibetrag (2026). Hand calculation from § 32a
+ * and § 51a Abs. 2 EStG (SPEC 11.2).
+ *
+ * Inputs: G16 facts (Gewinn 120,000, 2 children under 25, unmarried, one-parent
+ * KFB = 2 × 4,878 = 9,756) plus Kirchensteuer 9 % (NRW). Social contributions
+ * are unchanged from G16 (already at the KV/PV-BBG):
+ *   KV = 69,750 × 16.9 % = 11,787.75
+ *   PV rate 3.35 %; PV = 69,750 × 0.0335 = 2,336.625 → 2,336.63
+ *   Vorsorge = 14,124.38
+ *
+ * KiSt is 9 % of the fictitious ESt (Kinderfreibeträge deducted), not of the
+ * real festzusetzende ESt. sa uses the cash KiSt. Zone 4 of 2026:
+ *   tariff(x) = floor(0.42 × x − 11,135.63),   69,878 < x ≤ 277,825.
+ *
+ * Iteration (sa = max(36, KiSt)):
+ *
+ *   1. sa=36
+ *      zvE      = floor(120,000 − 14,124.38 − 36)            = 105,839.62 → 105,839
+ *      ESt raw  = 0.42 × 105,839 − 11,135.63                  = 33,316.75 → 33,316
+ *      zve_soli = floor(120,000 − 14,124.38 − 36 − 9,756)    =  96,083.62 →  96,083
+ *      fest_soli raw = 0.42 × 96,083 − 11,135.63              = 29,219.23 → 29,219
+ *      KiSt     = commercial(0.09 × 29,219)                   = 2,629.71
+ *
+ *   2. sa=2,629.71
+ *      zvE      = floor(120,000 − 14,124.38 − 2,629.71)       = 103,245.91 → 103,245
+ *      ESt raw  = 0.42 × 103,245 − 11,135.63                  = 32,227.27 → 32,227
+ *      zve_soli = floor(120,000 − 14,124.38 − 2,629.71 − 9,756) = 93,489.91 → 93,489
+ *      fest_soli raw = 0.42 × 93,489 − 11,135.63              = 28,129.75 → 28,129
+ *      KiSt     = commercial(0.09 × 28,129)                   = 2,531.61
+ *
+ *   3. sa=2,531.61
+ *      zvE      = floor(120,000 − 14,124.38 − 2,531.61)       = 103,344.01 → 103,344
+ *      ESt raw  = 0.42 × 103,344 − 11,135.63                  = 32,268.85 → 32,268
+ *      zve_soli = 93,588.01 → 93,588
+ *      fest_soli raw = 0.42 × 93,588 − 11,135.63              = 28,171.33 → 28,171
+ *      KiSt     = commercial(0.09 × 28,171)                   = 2,535.39
+ *
+ *   4. sa=2,535.39
+ *      zvE      = floor(120,000 − 14,124.38 − 2,535.39)       = 103,340.23 → 103,340
+ *      ESt raw  = 0.42 × 103,340 − 11,135.63                  = 32,267.17 → 32,267
+ *      zve_soli = 93,584.23 → 93,584
+ *      fest_soli raw = 0.42 × 93,584 − 11,135.63              = 28,169.65 → 28,169
+ *      KiSt     = commercial(0.09 × 28,169) = 2,535.21
+ *
+ *   5. sa=2,535.21 — zvE 103,340, ESt 32,267, fest_soli 28,169, KiSt 2,535.21. Converged.
+ *
+ * Soli on the same fictitious ESt 28,169 (Freigrenze 20,350, Milderung):
+ *   0.055 × 28,169 = 1,549.295
+ *   0.119 × (28,169 − 20,350) = 0.119 × 7,819 = 930.461 → floor cents 930.46
+ *
+ * A 9 % KiSt on the *real* ESt 32,267 would have been 2,904.03; the fictitious
+ * base is what § 51a Abs. 2 requires.
+ *
+ * Burden = 11,787.75 + 2,336.63 + 32,267 + 930.46 + 2,535.21 = 49,857.05
+ * Netto  = 120,000 − 49,857.05 = 70,142.95
+ * Monthly = commercial(70,142.95 / 12) = 5,845.25
+ * Effective = commercial(49,857.05 / 120,000 × 100) = 41.55 %
+ */
+describe('G19 — KiSt 9 % with Kinderfreibetrag (2026)', () => {
+  const r = calc({
+    gewinn: 120000,
+    childrenUnder25: 2,
+    churchTax: true,
+    bundesland: 'Nordrhein-Westfalen',
+  });
+  it('intermediates and Netto, KiSt on fictitious ESt', () => {
+    expectEuro(r.kvCash, '11787.75', 'KV');
+    expectEuro(r.pvCash, '2336.63', 'PV');
+    expect(r.pvRate.percent).toBe('3.35');
+    expectEuro(r.vorsorge, '14124.38', 'Vorsorge');
+    expectEuro(r.zve, '103340.00', 'zvE');
+    expectEuro(r.festzusetzendeEstUser, '32267.00', 'real ESt (no KFB)');
+    expectEuro(r.festSoli, '28169.00', 'fictitious ESt for Soli and KiSt');
+    expect(r.kistRate.percent).toBe('9.00');
+    expectEuro(r.kistUser, '2535.21', 'KiSt = 0.09 × 28,169');
+    expectEuro(r.soliUser, '930.46', 'Soli on fictitious ESt');
+    expectEuro(r.totalBurden, '49857.05', 'Burden');
+    expectEuro(r.nettoAnnual, '70142.95', 'Netto');
+    expectEuro(r.nettoMonthly, '5845.25', 'monthly');
+    expect(r.effectiveBurdenPercent?.percent).toBe('41.55');
+    // Sanity: KiSt is not 9 % of the real festzusetzende ESt.
+    expect(r.kistUser.euros).not.toBe('2904.03');
+  });
+});
+
 describe('consistency (SPEC 11.3)', () => {
   it('G4 Netto === G14 Netto', () => {
     const g4 = calc({ gewinn: 80000, activity: 'gewerbe', hebesatz: 400 });

@@ -19,7 +19,7 @@ Voraussetzung: Node.js 22 oder neuer.
 
 ```bash
 npm install
-npm test          # Vitest, alle Goldfälle G1–G18 und M1–M4 sowie der isolierte Tarif
+npm test          # Vitest, alle Goldfälle G1–G19 und M1–M4 sowie der isolierte Tarif
 npm run typecheck
 npm run dev       # http://localhost:5173/de-calculator/
 npm run build     # statische Seite nach dist/, Basis-Pfad /de-calculator/

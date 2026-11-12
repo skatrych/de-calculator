@@ -171,8 +171,6 @@ export interface MultiYearResult {
   avg_burden: MoneyValue;
   /** avg_burden / avg_gewinn × 100; null if avg Gewinn is 0. */
   avg_effective: PercentValue | null;
-  /** Marginal burden of the average: each year's Gewinn+100, then re-averaged. */
-  avg_marginal: PercentValue | null;
 }
 
 /** @deprecated Use YearInput — kept as the SPEC's calculateNetto argument name equivalent. */

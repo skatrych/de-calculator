@@ -405,6 +405,10 @@ summary:focus {
   margin: 0 0 1rem;
 }
 
+.rates.rates-single {
+  grid-template-columns: 1fr;
+}
+
 .rate-card {
   background: var(--paper-2);
   border: 1px solid var(--line);
@@ -501,10 +505,16 @@ table.break .netto-row td {
 .year-card .row {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 0.5rem;
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
   padding: 0.12rem 0;
+}
+
+.year-card .row span:last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .year-card .row.strong {

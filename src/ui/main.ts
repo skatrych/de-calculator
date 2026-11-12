@@ -556,12 +556,10 @@ function renderAverage(r: MultiYearResult): HTMLElement {
   );
   wrap.append(label);
 
-  const rates = el('div', { className: 'rates' });
+  const rates = el('div', { className: 'rates rates-single' });
   const e1 = el('div', { className: 'rate-card' });
   e1.append(el('dt', { text: 'Effektive Gesamtbelastung' }), el('dd', { text: formatPercent(r.avg_effective) }));
-  const e2 = el('div', { className: 'rate-card' });
-  e2.append(el('dt', { text: 'Effektive Grenzbelastung' }), el('dd', { text: formatPercent(r.avg_marginal) }));
-  rates.append(e1, e2);
+  rates.append(e1);
   wrap.append(rates);
 
   const table = el('table', { className: 'break' });
@@ -622,6 +620,7 @@ function renderAverage(r: MultiYearResult): HTMLElement {
       ['Soli', formatEuro(y.soliUser)],
       ['KiSt', formatEuro(y.kistUser)],
       ['GewSt', formatEuro(y.gewerbesteuer)],
+      ['Grenzbelastung', formatPercent(y.marginalBurdenPercent)],
       ['Netto (Jahr)', formatEuro(y.nettoAnnual), true],
       ['Netto (Monat)', formatEuro(y.nettoMonthly), true],
     ];

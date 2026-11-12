@@ -3,7 +3,7 @@
  * pipeline lives. Deterministic, no I/O, no DOM.
  *
  * Order: year params → social contributions → deductible Vorsorge →
- * GewSt → KiSt/ESt iteration → Soli (with Kinderfreibetrag) → Netto.
+ * GewSt → KiSt/ESt iteration (KiSt on the same fictitious ESt as Soli, § 51a Abs. 2) → Soli → Netto.
  * Gewerbesteuer is not deducted from Gewinn (§ 4 Abs. 5b EStG).
  */
 import { commercialCents, commercialPercent, d, floorEuro, toMoney, toPercent, type Decimal } from './money.ts';
@@ -69,7 +69,58 @@ function runPipeline(
 
   const pausch = v.married ? params.pauschbetragJoint : params.pauschbetragSingle;
 
-  // --- Kirchensteuer / ESt iteration (SPEC Section 6.7) ---
+  // --- Kirchensteuer / ESt iteration (SPEC Sections 6.7 and 6.9) ---
+  // festzusetzende ESt is computed without Kinderfreibeträge. KiSt and Soli
+  // share the same fictitious ESt that deducts them (§ 51a Abs. 2 EStG,
+  // SolzG § 3 Abs. 2). The Sonderausgaben deduction still uses the cash KiSt.
+  const childrenKfb = v.childrenUnder25;
+  const kfbPer =
+    v.married || v.fullKinderfreibetrag ? params.kfbBothParents : params.kfbOneParent;
+  const kfb = childrenKfb > 0 ? kfbPer.times(childrenKfb) : d(0);
+
+  const assess = (zveUserRaw: Decimal) => {
+    let zveUser = zveUserRaw;
+    if (zveUser.isNegative()) zveUser = d(0);
+    const zveJointInner = zveUser.plus(floorEuro(v.spouseZve));
+    let estInner: Decimal;
+    let zoneInner: TaxZone;
+    let zveForTariffInner: Decimal;
+    if (v.married) {
+      const split = tariffSplitting(zveJointInner, params);
+      estInner = split.est;
+      zoneInner = split.zone;
+      zveForTariffInner = split.half;
+    } else {
+      const t = tariff(zveUser, params);
+      estInner = t.est;
+      zoneInner = t.zone;
+      zveForTariffInner = zveUser;
+    }
+    const creditInner =
+      v.activity === 'gewerbe'
+        ? section35Credit(
+            estInner,
+            gewerbe.messbetrag,
+            gewerbe.gewst,
+            gewinn,
+            v.spouseZve,
+            v.married,
+            params,
+          )
+        : d(0);
+    let festInner = estInner.minus(creditInner);
+    if (festInner.isNegative()) festInner = d(0);
+    return {
+      zve: zveUser,
+      zveJoint: zveJointInner,
+      est: estInner,
+      credit: creditInner,
+      fest: festInner,
+      taxZone: zoneInner,
+      zveForTariff: zveForTariffInner,
+    };
+  };
+
   let kist = d(0);
   let fest = d(0);
   let est = d(0);
@@ -79,72 +130,31 @@ function runPipeline(
   let taxZone: TaxZone = 1;
   let zveForTariff = d(0);
   let sa = pausch;
+  let festSoli = d(0);
 
   for (let i = 0; i < KIST_MAX_ITERATIONS; i++) {
     sa = maxDec(pausch, v.otherSonderausgaben.plus(kist));
-    zve = floorEuro(gewinn.minus(social.vorsorge).minus(sa));
-    if (zve.isNegative()) zve = d(0);
-    zveJoint = zve.plus(floorEuro(v.spouseZve));
+    const real = assess(floorEuro(gewinn.minus(social.vorsorge).minus(sa)));
+    zve = real.zve;
+    zveJoint = real.zveJoint;
+    est = real.est;
+    credit = real.credit;
+    fest = real.fest;
+    taxZone = real.taxZone;
+    zveForTariff = real.zveForTariff;
 
-    if (v.married) {
-      const split = tariffSplitting(zveJoint, params);
-      est = split.est;
-      taxZone = split.zone;
-      zveForTariff = split.half;
+    if (kfb.gt(0)) {
+      festSoli = assess(floorEuro(gewinn.minus(social.vorsorge).minus(sa).minus(kfb))).fest;
     } else {
-      const t = tariff(zve, params);
-      est = t.est;
-      taxZone = t.zone;
-      zveForTariff = zve;
+      festSoli = fest;
     }
 
-    credit =
-      v.activity === 'gewerbe'
-        ? section35Credit(est, gewerbe.messbetrag, gewerbe.gewst, gewinn, v.spouseZve, v.married, params)
-        : d(0);
-    fest = est.minus(credit);
-    if (fest.isNegative()) fest = d(0);
-
-    const kistNew = v.churchTax ? commercialCents(v.kistRate.times(fest)) : d(0);
+    const kistNew = v.churchTax ? commercialCents(v.kistRate.times(festSoli)) : d(0);
     if (kistNew.eq(kist)) {
       kist = kistNew;
       break;
     }
     kist = kistNew;
-  }
-
-  // --- Soli, with Kinderfreibetrag on the fictitious base (SPEC Section 6.9) ---
-  // KiSt-on-fictitious-ESt is optional and is not implemented: v1 golden tests
-  // never combine KiSt with children. Minimum requirement: KFB on the Soli base.
-  const childrenKfb = v.childrenUnder25;
-  let festSoli = fest;
-  if (childrenKfb > 0) {
-    const per = v.married || v.fullKinderfreibetrag ? params.kfbBothParents : params.kfbOneParent;
-    const kfb = per.times(childrenKfb);
-    const saSoli = maxDec(pausch, v.otherSonderausgaben.plus(kist));
-    let zveSoliUser = floorEuro(gewinn.minus(social.vorsorge).minus(saSoli).minus(kfb));
-    if (zveSoliUser.isNegative()) zveSoliUser = d(0);
-    let estSoli: Decimal;
-    if (v.married) {
-      const zveSoliJoint = zveSoliUser.plus(floorEuro(v.spouseZve));
-      estSoli = tariffSplitting(zveSoliJoint, params).est;
-    } else {
-      estSoli = tariff(zveSoliUser, params).est;
-    }
-    const creditSoli =
-      v.activity === 'gewerbe'
-        ? section35Credit(
-            estSoli,
-            gewerbe.messbetrag,
-            gewerbe.gewst,
-            gewinn,
-            v.spouseZve,
-            v.married,
-            params,
-          )
-        : d(0);
-    festSoli = estSoli.minus(creditSoli);
-    if (festSoli.isNegative()) festSoli = d(0);
   }
 
   const soli = soliOn(festSoli, params, v.married);
@@ -344,17 +354,8 @@ export function calculateNettoAverage(years: YearInput[]): AverageOutcome {
       ? toPercent(commercialPercent(d(avg_burden.euros).div(d(avg_gewinn.euros)).times(100)))
       : null;
 
-  // Marginal of the average: re-run each year at Gewinn+100, then re-average the burden.
-  let avg_marginal: MultiYearResult['avg_marginal'] = null;
-  const plusInputs: YearInput[] = ordered.map(({ input }, i) => ({
-    ...input,
-    gewinn: d(perYear[i].gewinn.euros).plus(MARGINAL_STEP).toString(),
-  }));
-  const plusOutcome = calculateNettoAverageInternal(plusInputs);
-  if (plusOutcome) {
-    const delta = d(plusOutcome.avg_burden.euros).minus(d(avg_burden.euros));
-    avg_marginal = toPercent(commercialPercent(delta.div(MARGINAL_STEP).times(100)));
-  }
+  // Grenzbelastung is not averaged (SPEC 6.11). Each YearResult already carries
+  // its own marginalBurdenPercent from the single-year pipeline.
 
   const result: MultiYearResult = {
     years: perYear.map((r) => r.year),
@@ -372,40 +373,8 @@ export function calculateNettoAverage(years: YearInput[]): AverageOutcome {
     avg_av: averageMoney(perYear, (r) => r.avCash),
     avg_burden,
     avg_effective,
-    avg_marginal,
   };
   return { ok: true, result };
-}
-
-/** Average without computing a further marginal (avoids recursion). */
-function calculateNettoAverageInternal(years: YearInput[]): MultiYearResult | null {
-  const perYear: YearResult[] = [];
-  for (const input of years) {
-    const outcome = calculateNetto(input);
-    if (!outcome.ok) return null;
-    perYear.push(outcome.result);
-  }
-  const avg_netto = averageMoney(perYear, (r) => r.nettoAnnual);
-  const avg_burden = averageMoney(perYear, (r) => r.totalBurden);
-  const avg_gewinn = averageMoney(perYear, (r) => r.gewinn);
-  return {
-    years: perYear.map((r) => r.year),
-    perYear,
-    avg_netto,
-    avg_monthly: toMoney(commercialCents(d(avg_netto.euros).div(12))),
-    avg_gewinn,
-    avg_est: averageMoney(perYear, (r) => r.festzusetzendeEstUser),
-    avg_soli: averageMoney(perYear, (r) => r.soliUser),
-    avg_kist: averageMoney(perYear, (r) => r.kistUser),
-    avg_gewst: averageMoney(perYear, (r) => r.gewerbesteuer),
-    avg_kv: averageMoney(perYear, (r) => r.kvCash),
-    avg_pv: averageMoney(perYear, (r) => r.pvCash),
-    avg_rv: averageMoney(perYear, (r) => r.rvCash),
-    avg_av: averageMoney(perYear, (r) => r.avCash),
-    avg_burden,
-    avg_effective: null,
-    avg_marginal: null,
-  };
 }
 
 
