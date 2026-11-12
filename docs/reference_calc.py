@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Research aid used to produce the golden-test figures in SPEC.md.
 
+Supports tax years 2023–2026 (including West/Ost Rechtskreis and the
+mid-2023 weighted PV rate) and the three-year average (calculate_average).
 This is NOT the product. The product is a TypeScript implementation of SPEC.md.
 If this script and SPEC.md ever disagree, SPEC.md wins.
 """
@@ -30,6 +32,80 @@ def comm_cents(x: Decimal) -> Decimal:
 
 # ---- Year params ----
 PARAMS = {
+    2023: dict(
+        gfb=D(10908),
+        z1_hi=D(15999),
+        z2_hi=D(62809),
+        z3_hi=D(277825),
+        a=D('979.18'),
+        b=D('192.59'),
+        c=D('966.53'),
+        d_sub=D('9972.98'),
+        e_sub=D('18307.73'),
+        z_base=D(15999),
+        soli_fg=D(17543),
+        soli_fg_joint=D(35086),
+        kv_bbg=D(59850),
+        rv_rate=D('0.186'),
+        av_rate=D('0.026'),
+        zusatz=D('0.016'),
+        alter_cap=D(26528),
+        kfb_one=D(4476),   # 3,012 + 1,464
+        kfb_both=D(8952),
+        knap_bbg=D(107400),
+        rv_min_m=comm_cents(D(520) * D('0.186')),  # 96.72
+        west=dict(
+            bez=D(40740), bez_m=D(3395),
+            kv_min=D(40740) / 3,  # 13580
+            rv_bbg=D(87600), rv_bbg_m=D(7300),
+            rv_max_m=comm_cents(D(7300) * D('0.186')),  # 1357.80
+            regel_m=comm_cents(D(3395) * D('0.186')),  # 631.47
+        ),
+        ost=dict(
+            bez=D(39480), bez_m=D(3290),
+            kv_min=D(39480) / 3,  # 13160
+            rv_bbg=D(85200), rv_bbg_m=D(7100),
+            rv_max_m=comm_cents(D(7100) * D('0.186')),  # 1320.60
+            regel_m=comm_cents(D(3290) * D('0.186')),  # 611.94
+        ),
+    ),
+    2024: dict(
+        gfb=D(11784),
+        z1_hi=D(17005),
+        z2_hi=D(66760),
+        z3_hi=D(277825),
+        a=D('954.80'),
+        b=D('181.19'),
+        c=D('991.21'),
+        d_sub=D('10636.31'),
+        e_sub=D('18971.06'),
+        z_base=D(17005),
+        soli_fg=D(18130),
+        soli_fg_joint=D(36260),
+        kv_bbg=D(62100),
+        rv_rate=D('0.186'),
+        av_rate=D('0.026'),
+        zusatz=D('0.017'),
+        alter_cap=D(27566),
+        kfb_one=D(4770),   # 3,306 + 1,464
+        kfb_both=D(9540),
+        knap_bbg=D(111600),
+        rv_min_m=comm_cents(D(538) * D('0.186')),  # 100.07
+        west=dict(
+            bez=D(42420), bez_m=D(3535),
+            kv_min=D(42420) / 3,  # 14140
+            rv_bbg=D(90600), rv_bbg_m=D(7550),
+            rv_max_m=comm_cents(D(7550) * D('0.186')),  # 1404.30
+            regel_m=comm_cents(D(3535) * D('0.186')),  # 657.51
+        ),
+        ost=dict(
+            bez=D(41580), bez_m=D(3465),
+            kv_min=D(41580) / 3,  # 13860
+            rv_bbg=D(89400), rv_bbg_m=D(7450),
+            rv_max_m=comm_cents(D(7450) * D('0.186')),  # 1385.70
+            regel_m=comm_cents(D(3465) * D('0.186')),  # 644.49
+        ),
+    ),
     2025: dict(
         gfb=D(12096),
         z1_hi=D(17443),
@@ -136,23 +212,46 @@ def soli_on(est: Decimal, year: int, joint: bool):
     which = "full 5.5%" if full <= mild else "Milderung 11.9%"
     return soli, f"{which}: min(0.055*{est}={full}, 0.119*({est}-{fg})={mild})={raw} -> floor cents {soli}"
 
-def pv_rate(age23: bool, children: int) -> Decimal:
-    """children = number of children under 25 for the Abschlag (2..5).
-    1 child (any age, Elterneigenschaft) = 3.6% no surcharge.
-    0 children and age 23+ = 4.2%.
-    Under 23 and 0 children = 3.6%.
-    For 2+ children under 25: 3.6% - 0.25%*(n-1) with n capped at 5.
+def resolve_params(year: int, rechtskreis: str = 'west') -> dict:
+    """Return a flat param dict with Rechtskreis West/Ost applied for 2023-2024.
+    From 2025 the Bezugsgröße and RV-BBG are nationwide (SVBezGrV 2025 onward).
     """
+    base = dict(PARAMS[year])  # shallow
+    if 'west' in base:
+        rk = base['ost'] if rechtskreis == 'ost' else base['west']
+        out = {k: v for k, v in base.items() if k not in ('west', 'ost')}
+        out.update(rk)
+        return out
+    # 2025+ already flat and unified
+    return base
+
+def _pv_from_base(base: Decimal, surcharge_childless: Decimal, age23: bool, children: int, abschlag: bool) -> Decimal:
+    """base = general PV rate; surcharge for childless 23+; if abschlag, -0.25 pp from 2nd to 5th child under 25."""
     if children <= 0:
-        return D('0.042') if age23 else D('0.036')
-    if children == 1:
-        return D('0.036')
+        return base + (surcharge_childless if age23 else D(0))
+    if children == 1 or not abschlag:
+        return base  # Elterneigenschaft, no surcharge; pre-PUEG also no Abschlag
     n = min(children, 5)
-    return D('0.036') - D('0.0025') * (n - 1)
+    return base - D('0.0025') * (n - 1)
+
+def pv_rate(year: int, age23: bool, children: int) -> Decimal:
+    """Annual PV rate. For 2023, a 6+6 month weighted average around the 1 July PUEG change."""
+    if year >= 2025:
+        return _pv_from_base(D('0.036'), D('0.006'), age23, children, abschlag=True)
+    if year == 2024:
+        return _pv_from_base(D('0.034'), D('0.006'), age23, children, abschlag=True)
+    if year == 2023:
+        # 1 Jan–30 Jun: 3.05 % general, +0.35 pp childless 23+, no Abschlag
+        # 1 Jul–31 Dec (PUEG): 3.40 % general, +0.60 pp childless, Abschlag 2nd–5th
+        h1 = _pv_from_base(D('0.0305'), D('0.0035'), age23, children, abschlag=False)
+        h2 = _pv_from_base(D('0.0340'), D('0.0060'), age23, children, abschlag=True)
+        return (h1 + h2) / 2  # exact 6/12 + 6/12; equals (h1+h2)/2
+    raise ValueError(year)
 
 def calculate(inp: dict, verbose=True):
     year = inp['year']
-    p = PARAMS[year]
+    rechtskreis = inp.get('rechtskreis', 'west')
+    p = resolve_params(year, rechtskreis)
     gewinn = d(inp['gewinn'])
     gewerbe = inp.get('gewerbe', False)
     hebesatz = d(inp.get('hebesatz', 400))
@@ -180,7 +279,7 @@ def calculate(inp: dict, verbose=True):
             print(s)
 
     log(f"=== {inp.get('name','case')} ===")
-    log(f"Jahr={year} Gewinn={gewinn} Gewerbe={gewerbe} Hebesatz={hebesatz} married={married} spouse={spouse}")
+    log(f"Jahr={year} Rechtskreis={rechtskreis} Gewinn={gewinn} Gewerbe={gewerbe} Hebesatz={hebesatz} married={married} spouse={spouse}")
     log(f"KiSt={church} children={children} age23={age23} kv={kv_type} zusatz={zusatz} rv={rv_mode} av={av}")
 
     # --- Social: KV/PV ---
@@ -206,7 +305,7 @@ def calculate(inp: dict, verbose=True):
             kv_rate = D('0.140') + zusatz
             has_krankengeld = False
         kv_cash = comm_cents(bem * kv_rate)
-        pvr = pv_rate(age23, children)
+        pvr = pv_rate(year, age23, children)
         pv_cash = comm_cents(bem * pvr)
         if has_krankengeld:
             kv_ded = comm_cents(kv_cash * D('0.96'))
@@ -400,6 +499,22 @@ def calculate(inp: dict, verbose=True):
     if married:
         log(f"Tax allocation share={share}: ESt_user={est_user} Soli_user={soli_user} KiSt_user={kist_user} (joint fest={fest} soli={soli} kist={kist})")
 
+    # Optional Steuerbescheid override (ESt / Soli / KiSt). GewSt and socials stay computed.
+    override_used = False
+    if any(k in inp for k in ('override_est', 'override_soli', 'override_kist')):
+        override_used = True
+        log(f"OVERRIDE from Steuerbescheid: calculated ESt={est_user} Soli={soli_user} KiSt={kist_user}")
+        if 'override_est' in inp:
+            est_user = d(inp['override_est'])
+        if 'override_soli' in inp:
+            soli_user = d(inp['override_soli'])
+        if 'override_kist' in inp:
+            kist_user = d(inp['override_kist'])
+        fest = est_user  # display
+        soli = soli_user
+        kist = kist_user
+        log(f"  using ESt={est_user} Soli={soli_user} KiSt={kist_user}")
+
     total_tax = est_user + soli_user + kist_user + gewst
     total_soc = kv_cash + pv_cash + rv_cash + av_cash
     total_burden = total_tax + total_soc
@@ -422,92 +537,150 @@ def calculate(inp: dict, verbose=True):
         netto=netto, total_burden=total_burden, eff=eff,
         lines=lines,
         bem_kv=bem if kv_type.startswith('gkv') else None,
+        override_used=override_used,
+        year=year,
+        gewinn=gewinn,
     )
     return result
 
-# ---- Isolated tariff table ----
-print("======== TARIFF UNIT TABLE ========")
-for year in (2025, 2026):
-    print(f"\n-- {year} --")
-    p = PARAMS[year]
-    points = [
-        0, p['gfb'], p['gfb']+1, p['z1_hi'], p['z1_hi']+1,
-        D(30000), D(50000), p['z2_hi'], p['z2_hi']+1,
-        D(80000), D(100000), D(105246), D(120000),
-        p['soli_fg'],  # this is ESt not zve
-        D(200000), p['z3_hi'], p['z3_hi']+1, D(400000),
+
+def calculate_average(inputs, verbose=True):
+    """Arithmetic mean of N yearly results (product rule: 3 consecutive closed years)."""
+    results = [calculate(inp, verbose=verbose) for inp in inputs]
+    n = D(len(results))
+    def avg(key):
+        return comm_cents(sum((r[key] for r in results), D(0)) / n)
+    out = dict(
+        n=len(results),
+        years=[r['year'] for r in results],
+        per_year=results,
+        avg_netto=avg('netto'),
+        avg_burden=avg('total_burden'),
+        avg_est=avg('est_user'),
+        avg_soli=avg('soli_user'),
+        avg_kist=avg('kist_user'),
+        avg_gewst=avg('gewst'),
+        avg_kv=avg('kv_cash'),
+        avg_pv=avg('pv_cash'),
+        avg_rv=avg('rv_cash'),
+        avg_av=avg('av_cash'),
+        avg_gewinn=avg('gewinn'),
+    )
+    out['avg_monthly'] = comm_cents(out['avg_netto'] / 12)
+    out['avg_eff'] = (out['avg_burden'] / out['avg_gewinn'] * 100).quantize(D('0.01'), rounding=ROUND_HALF_UP) if out['avg_gewinn'] else D(0)
+    if verbose:
+        print(f"=== DREIJAHRESDURCHSCHNITT {out['years']} ===")
+        for r in results:
+            print(f"  {r['year']}: Gewinn={r['gewinn']} Netto={r['netto']} Burden={r['total_burden']}")
+        print(f"  AVERAGE Netto={out['avg_netto']} monthly={out['avg_monthly']} Burden={out['avg_burden']} effective={out['avg_eff']}%")
+        print(f"  avg ESt={out['avg_est']} Soli={out['avg_soli']} KiSt={out['avg_kist']} GewSt={out['avg_gewst']}")
+        print(f"  avg KV={out['avg_kv']} PV={out['avg_pv']} RV={out['avg_rv']} AV={out['avg_av']}")
+        print()
+    return out
+
+
+def _main_golden():
+    # ---- Isolated tariff table ----
+    print("======== TARIFF UNIT TABLE ========")
+    for year in (2023, 2024, 2025, 2026):
+        print(f"\n-- {year} --")
+        p = PARAMS[year]
+        points = [
+            0, p['gfb'], p['gfb']+1, p['z1_hi'], p['z1_hi']+1,
+            D(30000), D(50000), p['z2_hi'], p['z2_hi']+1,
+            D(80000), D(100000), D(105246), D(120000),
+            p['soli_fg'],  # this is ESt not zve
+            D(200000), p['z3_hi'], p['z3_hi']+1, D(400000),
+        ]
+        # also find zve where ESt just exceeds soli fg
+        for x in points:
+            est, raw, zone, detail = tariff(d(x), year)
+            print(f"  zvE={x:>10}  zone={zone}  raw={raw}  ESt={est}  | {detail}")
+
+        # Splitting examples
+        for x in (D(80000), D(160000), D(0)):
+            est, half, eh, raw, zone, detail = tariff_splitting(x, year)
+            print(f"  SPLIT zve={x} half={half} ESt={est}")
+
+    print("\n\n======== GOLDEN CASES ========\n")
+
+    cases = [
+        dict(name="G1 GKV-Mindestbemessung niedriges Einkommen",
+             year=2026, gewinn=10000, gewerbe=False),
+        dict(name="G2 Gewinn über KV-BBG (und Soli-Milderungszone)",
+             year=2026, gewinn=120000, gewerbe=False),
+        dict(name="G3 Gewerbe unter Freibetrag",
+             year=2026, gewinn=20000, gewerbe=True, hebesatz=400),
+        dict(name="G4 Gewerbe über Freibetrag Hebesatz 400%",
+             year=2026, gewinn=80000, gewerbe=True, hebesatz=400),
+        dict(name="G5 Gewerbe Hebesatz 500% Rest-GewSt",
+             year=2026, gewinn=80000, gewerbe=True, hebesatz=500),
+        dict(name="G6 Splitting Ehepartner-zvE 0",
+             year=2026, gewinn=80000, gewerbe=False, married=True, spouse=0),
+        dict(name="G7 Splitting Ehepartner-zvE 40000",
+             year=2026, gewinn=80000, gewerbe=False, married=True, spouse=40000),
+        dict(name="G8 Kirchensteuer 9% NRW",
+             year=2026, gewinn=80000, gewerbe=False, church=D('0.09')),
+        dict(name="G9 Drei Kinder PV-Abschlag + Soli-KFB",
+             year=2026, gewinn=80000, gewerbe=False, children=3, children_kfb=3, kfb_full=False),
+        dict(name="G10 PKV",
+             year=2026, gewinn=80000, gewerbe=False, kv_type='pkv',
+             pkv_month=700, pkv_basis_month=600, ppv_month=150),
+        dict(name="G11 Jahr 2025 Vergleich Freiberufler 80000",
+             year=2025, gewinn=80000, gewerbe=False),
+        dict(name="G12 GKV allgemein mit Krankengeld 4%-Abschlag",
+             year=2026, gewinn=80000, gewerbe=False, kv_type='gkv_allgemein'),
+        dict(name="G13 Pflicht-RV einkommensbezogen",
+             year=2026, gewinn=80000, gewerbe=False, rv_mode='mandatory'),
+        dict(name="G14 Freiberufler 80000 Basis 2026 (Referenz)",
+             year=2026, gewinn=80000, gewerbe=False),
+        dict(name="G15 Reichensteuer-Zone",
+             year=2026, gewinn=400000, gewerbe=False),
+        dict(name="G16 Kirchensteuer 8% Bayern",
+             year=2026, gewinn=80000, gewerbe=False, church=D('0.08')),
+        dict(name="G17 Ein Kind PV 3,6% (kein Zuschlag)",
+             year=2026, gewinn=80000, gewerbe=False, children=1, children_kfb=1),
+        dict(name="G18 2025 niedriges Einkommen GKV-Min",
+             year=2025, gewinn=10000, gewerbe=False),
     ]
-    # also find zve where ESt just exceeds soli fg
-    for x in points:
-        est, raw, zone, detail = tariff(d(x), year)
-        print(f"  zvE={x:>10}  zone={zone}  raw={raw}  ESt={est}  | {detail}")
 
-    # Splitting examples
-    for x in (D(80000), D(160000), D(0)):
-        est, half, eh, raw, zone, detail = tariff_splitting(x, year)
-        print(f"  SPLIT zve={x} half={half} ESt={est}")
+    results = {}
+    for c in cases:
+        r = calculate(c, verbose=True)
+        results[c['name']] = r
 
-print("\n\n======== GOLDEN CASES ========\n")
+    # Marginal rate for G14: Gewinn+100
+    print("======== MARGINAL G14 ========")
+    base = dict(name="G14base", year=2026, gewinn=80000, gewerbe=False)
+    plus = dict(name="G14plus", year=2026, gewinn=80100, gewerbe=False)
+    rb = calculate(base, verbose=False)
+    rp = calculate(plus, verbose=False)
+    d_burden = rp['total_burden'] - rb['total_burden']
+    d_netto = rb['netto'] - rp['netto']
+    print(f"Burden 80k={rb['total_burden']} 80100={rp['total_burden']} delta={d_burden}")
+    print(f"Netto 80k={rb['netto']} 80100={rp['netto']} delta={d_netto}")
+    print(f"Grenzbelastung={d_burden/100*100}%")
 
-cases = [
-    dict(name="G1 GKV-Mindestbemessung niedriges Einkommen",
-         year=2026, gewinn=10000, gewerbe=False),
-    dict(name="G2 Gewinn über KV-BBG (und Soli-Milderungszone)",
-         year=2026, gewinn=120000, gewerbe=False),
-    dict(name="G3 Gewerbe unter Freibetrag",
-         year=2026, gewinn=20000, gewerbe=True, hebesatz=400),
-    dict(name="G4 Gewerbe über Freibetrag Hebesatz 400%",
-         year=2026, gewinn=80000, gewerbe=True, hebesatz=400),
-    dict(name="G5 Gewerbe Hebesatz 500% Rest-GewSt",
-         year=2026, gewinn=80000, gewerbe=True, hebesatz=500),
-    dict(name="G6 Splitting Ehepartner-zvE 0",
-         year=2026, gewinn=80000, gewerbe=False, married=True, spouse=0),
-    dict(name="G7 Splitting Ehepartner-zvE 40000",
-         year=2026, gewinn=80000, gewerbe=False, married=True, spouse=40000),
-    dict(name="G8 Kirchensteuer 9% NRW",
-         year=2026, gewinn=80000, gewerbe=False, church=D('0.09')),
-    dict(name="G9 Drei Kinder PV-Abschlag + Soli-KFB",
-         year=2026, gewinn=80000, gewerbe=False, children=3, children_kfb=3, kfb_full=False),
-    dict(name="G10 PKV",
-         year=2026, gewinn=80000, gewerbe=False, kv_type='pkv',
-         pkv_month=700, pkv_basis_month=600, ppv_month=150),
-    dict(name="G11 Jahr 2025 Vergleich Freiberufler 80000",
-         year=2025, gewinn=80000, gewerbe=False),
-    dict(name="G12 GKV allgemein mit Krankengeld 4%-Abschlag",
-         year=2026, gewinn=80000, gewerbe=False, kv_type='gkv_allgemein'),
-    dict(name="G13 Pflicht-RV einkommensbezogen",
-         year=2026, gewinn=80000, gewerbe=False, rv_mode='mandatory'),
-    dict(name="G14 Freiberufler 80000 Basis 2026 (Referenz)",
-         year=2026, gewinn=80000, gewerbe=False),
-    dict(name="G15 Reichensteuer-Zone",
-         year=2026, gewinn=400000, gewerbe=False),
-    dict(name="G16 Kirchensteuer 8% Bayern",
-         year=2026, gewinn=80000, gewerbe=False, church=D('0.08')),
-    dict(name="G17 Ein Kind PV 3,6% (kein Zuschlag)",
-         year=2026, gewinn=80000, gewerbe=False, children=1, children_kfb=1),
-    dict(name="G18 2025 niedriges Einkommen GKV-Min",
-         year=2025, gewinn=10000, gewerbe=False),
-]
+    # Also +1
+    plus1 = dict(name="G14plus1", year=2026, gewinn=80001, gewerbe=False)
+    rp1 = calculate(plus1, verbose=False)
+    print(f"+1 Burden={rp1['total_burden']} delta={rp1['total_burden']-rb['total_burden']}")
+    print(f"+1 Netto={rp1['netto']}")
 
-results = {}
-for c in cases:
-    r = calculate(c, verbose=True)
-    results[c['name']] = r
 
-# Marginal rate for G14: Gewinn+100
-print("======== MARGINAL G14 ========")
-base = dict(name="G14base", year=2026, gewinn=80000, gewerbe=False)
-plus = dict(name="G14plus", year=2026, gewinn=80100, gewerbe=False)
-rb = calculate(base, verbose=False)
-rp = calculate(plus, verbose=False)
-d_burden = rp['total_burden'] - rb['total_burden']
-d_netto = rb['netto'] - rp['netto']
-print(f"Burden 80k={rb['total_burden']} 80100={rp['total_burden']} delta={d_burden}")
-print(f"Netto 80k={rb['netto']} 80100={rp['netto']} delta={d_netto}")
-print(f"Grenzbelastung={d_burden/100*100}%")
+    # ---- Multi-year goldens M1–M4 ----
+    print("======== MULTI-YEAR M1–M4 ========")
+    def y(year, gewinn=80000, **kw):
+        return dict(name=f'{year}-{gewinn}', year=year, gewinn=gewinn, gewerbe=False, **kw)
+    calculate_average([y(2024), y(2025), y(2026)], verbose=True)
+    calculate_average([y(2023), y(2024), y(2025)], verbose=True)
+    calculate_average([
+        dict(name='2023-override', year=2023, gewinn=80000, gewerbe=False,
+             override_est=18500, override_soli=0, override_kist=0),
+        y(2024), y(2025),
+    ], verbose=True)
+    calculate_average([y(2023, 50000), y(2024, 80000), y(2025, 120000)], verbose=True)
 
-# Also +1
-plus1 = dict(name="G14plus1", year=2026, gewinn=80001, gewerbe=False)
-rp1 = calculate(plus1, verbose=False)
-print(f"+1 Burden={rp1['total_burden']} delta={rp1['total_burden']-rb['total_burden']}")
-print(f"+1 Netto={rp1['netto']}")
+
+if __name__ == '__main__':
+    _main_golden()

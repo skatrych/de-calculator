@@ -1,10 +1,11 @@
 # SPEC: Netto-Einkommen für Selbständige (Germany)
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2026-11-12  
 **Status:** Authoritative specification for implementation and QA.  
-**Supported tax years:** 2025 and 2026 (default: 2026).  
-**Product:** a usable static web app (German UI) that estimates the annual and monthly net income of a self-employed person under current German tax and social-insurance law.
+**Supported tax years:** 2023, 2024, 2025 and 2026.  
+**Default mode:** three consecutive closed years (as of this date: 2023–2025), each computed with that year’s own legal parameters, then averaged. Single-year mode remains available.  
+**Product:** a usable static web app (German UI) that estimates the annual and monthly net income of a self-employed person under current German tax and social-insurance law, including the three-year average that courts and (typically) banks use as the representative figure.
 
 **Disclaimer (must appear prominently in the UI and the README):**
 
@@ -22,13 +23,51 @@ The primary user is a self-employed software engineer (Freiberufler or Gewerbetr
 
 A second calculator (Kindesunterhalt after the Düsseldorfer Tabelle) is planned next. It is **not** in v1. Architecture stays minimal: share only the app shell and formatting. No plugin framework, no generic calculator registry, and no other calculators.
 
+### 1.1 Official net income and the three-year average
+
+There is **no single statutory “official Netto”** that every German institution uses. The three-year average is the standard method for some purposes and is **not** used for others. This section states what is true, then the product rule.
+
+#### Unterhalt (Family courts)
+
+The established method for a self-employed person’s **unterhaltsrelevantes Einkommen**, for current and future maintenance, is the average of the results of a longer period of **as a rule at least three consecutive years, preferably the last three** (the three calendar years preceding the maintenance period).
+
+- **BGH, 2 June 2004, XII ZR 217/01**, FamRZ 2004, 1177: because accounts and Steuerbescheide arrive after the year has closed, “ist es grundsätzlich nicht zu beanstanden, wenn der Tatrichter das häufig stark schwankende Einkommen selbständig Tätiger anhand der Ergebnisse der drei dem jeweiligen Unterhaltszeitraum vorausgehenden Kalenderjahre ermittelt.” The method **“darf jedoch nicht als Dogma mißverstanden werden.”** If those years do not reliably indicate current income — because they were shaped by **außergewöhnliche Ereignisse** or **steuerliche Sondereinflüsse** that clearly do not average out within the three-year window — those effects are to be left out (or a different period used). Taxes are in principle taken in the period they were actually paid; where timing distortions do not average out, a correction (including fictitious tax) may be required. See also **BGH, 21 September 2011, XII ZR 121/09**, repeating that average and tax-deduction methods must not be treated as dogma; and the earlier Senate judgment of 1 October 1986, IVb ZR 68/85, FamRZ 1987, 36.
+- The **Düsseldorfer Tabelle Leitlinien**, Nr. 1.5 (bundeseinheitliche Leitlinienstruktur; e.g. OLG Düsseldorf, Stand 1.1.2024, <https://www.olg-duesseldorf.nrw.de/infos/Duesseldorfer_Tabelle/Tabelle-2024/2023_12_21_Leitlinien_2024.pdf>): “Bei Selbständigen ist für den laufenden und zukünftigen Unterhalt grundsätzlich vom durchschnittlichen Gewinn während eines längeren Zeitraums von in der Regel mindestens drei aufeinander folgenden Jahren, möglichst den letzten drei Jahren, auszugehen.” For **past** maintenance, the income of the respective calendar year is decisive. Further Unterhalt-specific adjustments (Ansparabschreibungen, AfA only to the extent of a real loss of value, In-Prinzip vs. Für-Prinzip for tax refunds) are **out of scope** of this calculator; the Netto it produces is a **starting point**.
+
+#### Banks
+
+This is **practice, not a statute**. Mortgage and credit lenders typically ask a self-employed applicant for the **Einkommensteuerbescheide of the last two or three years**, the corresponding EÜR or annual accounts, and a recent **BWA** (often not older than three months), sometimes with a Steuerberater confirmation of sustainable income. Examples: Sparkasse guidance, <https://www.sparkasse.de/pk/ratgeber/finanzplanung/traeume-finanzieren/unterlagen-fuer-kredit.html>; TARGOBANK Unterlagen-Check, <https://www.targobank.de/de/baufinanzierung/checklisten/unterlagen-check-fuer-die-finanzierungsanfrage.html>. Requirements vary by bank and product. Many lenders then form their own view of sustainable income from those documents, often by averaging. The app’s three-year average is a **transparent figure that matches what those documents support**; it is not a bank’s formal credit decision.
+
+#### Authorities — do not overstate
+
+- **Elterngeld does not use a three-year average.** For self-employed persons the Bemessungszeitraum is the **last closed tax assessment period** before the birth (usually the previous calendar year). Legal basis: **§ 2b Abs. 2 BEEG**, <https://www.gesetze-im-internet.de/beeg/__2b.html>. Official explanation: Familienportal des Bundes, <https://familienportal.de/familienportal/familienleistungen/elterngeld/faq/wie-wird-mein-bisheriges-einkommen-fuer-die-berechnung-des-elterngelds-bestimmt--124604>. On application the period can be shifted back one closed year (mother-protection, earlier Elterngeld, pregnancy-related illness, military service). The Elterngeldstelle also applies its own simplified “Elterngeld-Netto,” which can differ from this app. **Single-year mode** is the right mode for an Elterngeld estimate of that closed year.
+- **Bürgergeld / Jobcenter does not use a three-year average.** Income is determined for the **Bewilligungszeitraum**, as a rule **six months**: a **prospective** estimate (Anlage EKS / Prognose) for a provisional award, then a final assessment on actual receipts and expenses. Legal basis: **§ 41a SGB II**, <https://www.gesetze-im-internet.de/sgb_2/__41a.html>, and **§ 3 Bürgergeld-Verordnung**. Past Steuerbescheide or a BWA may be used only to **check whether the prognosis is plausible**. Seasonal businesses can be looked at over 12 months. This calculator does not compute a Jobcenter EKS.
+
+#### Product rule (normative)
+
+The app adopts, as its **default result**, the **arithmetic mean of the Netto of three consecutive closed calendar years**, where **each year is computed in full with that year’s own legal parameters** (tariff, Soli Freigrenze, BBG, contribution rates, PV rate, Zusatzbeitrag default, Altersvorsorge cap, and — for 2023–2024 — the West/Ost Rechtskreis).
+
+```
+Dreijahres-Netto = (Netto(Y1) + Netto(Y2) + Netto(Y3)) / 3     # commercial cents
+```
+
+The UI must **label** this figure honestly, in German, for example:
+
+> **Dreijahresdurchschnitt** des Netto-Einkommens (arithmetisches Mittel der drei Jahres-Nettos). Das ist die übliche Grundlage für den **laufenden Unterhalt** nach der Rechtsprechung des BGH und den Düsseldorfer Leitlinien, und eine transparente Auswertung der Unterlagen, die **Banken** in der Regel (zwei bis drei Steuerbescheide) verlangen. **Nicht** die gesetzliche Bemessung für **Elterngeld** (§ 2b Abs. 2 BEEG: letzter abgeschlossener Veranlagungszeitraum) und **nicht** für **Bürgergeld** (§ 41a SGB II: Prognose für den Bewilligungszeitraum, in der Regel sechs Monate).
+
+Deviations that a court may make (extraordinary years, Ansparabschreibungen, actual tax payment timing) are not applied automatically; the optional **Steuerbescheid override** (Section 6.12) lets the user substitute assessed ESt, Soli and KiSt for a year. The later **Kindesunterhalt** calculator will consume this three-year average as its starting “unterhaltsrelevantes Einkommen,” before any further Unterhalt-specific Bereinigung (Section 13).
+
+
 ---
 
 ## 2. Scope and non-goals
 
 ### In scope (v1)
 
-- Annual **Gewinn** as the single income input (net of Umsatzsteuer).
+- Annual **Gewinn** as the income input (net of Umsatzsteuer), for one year or for three consecutive years.
+- **Multi-year mode (default):** three consecutive years in 2023–2026, each with its own parameters, and their arithmetic-mean Netto.
+- **Optional per-year override** of festzusetzende ESt, Soli and KiSt from the Steuerbescheid.
+- Tax years **2023 and 2024** in addition to 2025 and 2026, including the mid-2023 PV rate change and the 2023–2024 West/Ost Rechtskreis.
 - Freiberufler vs. Gewerbetreibender, with Gewerbesteuer and the § 35 EStG credit.
 - Einkommensteuer after § 32a EStG, for 2025 and 2026, Grundtarif and Splitting.
 - Solidaritätszuschlag (Freigrenze and Milderungszone).
@@ -67,7 +106,8 @@ A second calculator (Kindesunterhalt after the Düsseldorfer Tabelle) is planned
 - Prominent Netto, then the breakdown, then zvE / tarifliche ESt / § 35 / festzusetzende ESt, then effective and marginal rates.
 - The disclaimer is visible without scrolling on a desktop, and is in a footer on every view (including print).
 - Invalid inputs (negative premium, Basis share larger than the PKV premium, voluntary RV outside the legal min/max) are blocked with a German error message, not silently clamped, except for the legally required clamps on the KV/PV/RV **assessment base**.
-- Year selector: 2025 | 2026. Changing the year reloads defaults for Zusatzbeitrag (the official average) but does not erase the Gewinn or personal situation.
+- **Default view is multi-year:** three consecutive calendar years, a Gewinn for each year, one shared personal situation, live results. As of 2026-11-12 the default triple is **2023, 2024, 2025** (the last three closed years). The user may choose any consecutive triple in 2023–2026 (including a triple that contains the current year, for planning).
+- A clear control switches to **single-year mode** (for planning one year, or for an Elterngeld-style last closed year). Year selector in single-year mode: 2023 | 2024 | 2025 | 2026. Changing the year reloads the Zusatzbeitrag default (the official average) but does not erase the Gewinn or personal situation.
 - Print stylesheet is a nice-to-have.
 - A tiny CLI that calls the same core is a nice-to-have, not a v1 blocker.
 
@@ -77,8 +117,12 @@ A second calculator (Kindesunterhalt after the Düsseldorfer Tabelle) is planned
 
 | Input | UI label | Type | Default | Notes |
 |---|---|---|---|---|
-| Year | Jahr | 2025 \| 2026 | **2026** | Loads the parameter block of Section 7. |
-| Profit | Jahresgewinn (netto, ohne USt) | EUR, ≥ 0 | empty, required | Placeholder e.g. `80.000`. Annual Gewinn after Betriebsausgaben, **before** social contributions and tax. |
+| Mode | Berechnungsart | Dreijahresdurchschnitt \| Einzeljahr | **Dreijahresdurchschnitt** | Default; see Section 1.1. |
+| Years | Jahre | three consecutive in 2023–2026 | **2023, 2024, 2025** | Only in multi-year mode. Each year loads its own parameter block. |
+| Year | Jahr | 2023 \| 2024 \| 2025 \| 2026 | **2026** in single-year mode | Loads the parameter block of Section 7. |
+| Profit | Jahresgewinn (netto, ohne USt) | EUR, ≥ 0, **per year** | empty, required | Placeholder e.g. `80.000`. Annual Gewinn after Betriebsausgaben, **before** social contributions and tax. In multi-year mode, one field per year. |
+| Tax override | Steuerbescheid: festzusetzende ESt, Soli, KiSt | EUR, optional, **per year** | off | If set, those three cash amounts replace the calculated taxes for that year (Section 6.12). Social contributions and GewSt remain calculated. |
+| Rechtskreis | Rechtskreis West / Ost | West \| Ost | **West** | Visible only when a selected year is 2023 or 2024 (Bezugsgröße and RV-BBG still differed). Ignored from 2025 (nationwide). For Berlin, the user chooses; do not auto-guess. |
 | Activity | Tätigkeitsart | Freiberufler \| Gewerbe | **Freiberufler** | Software engineers may be either; the user chooses. |
 | Hebesatz | Gewerbesteuer-Hebesatz | %, ≥ 0 | **400** | Visible only for Gewerbe. 400 % is the point at which § 35 can fully offset GewSt. |
 | Married | Verheiratet, Zusammenveranlagung | bool | **nein** | Splitting after § 32a Abs. 5. |
@@ -90,7 +134,7 @@ A second calculator (Kindesunterhalt after the Düsseldorfer Tabelle) is planned
 | Age 23+ | Mindestens 23 Jahre alt | bool | **ja** | Childless surcharge applies only from the month after the 23rd birthday. |
 | Full Kinderfreibetrag | Vollen Kinderfreibetrag übertragen | bool | **nein** (on if married) | For Soli/KiSt base only. Single default is one parent’s share; check this to use both shares (e.g. other parent transferred). Married: always both shares. |
 | KV type | Krankenversicherung | GKV ermäßigt / GKV allgemein / PKV | **GKV ermäßigt (ohne Krankengeld)** | The usual choice for Selbständige. |
-| Zusatzbeitrag | Zusatzbeitragssatz | %, ≥ 0 | official average for the year (2.9 % in 2026, 2.5 % in 2025) | GKV only. The user should enter their kassenindividueller Satz; the default is the BMG average, which can be below the actual weighted average. |
+| Zusatzbeitrag | Zusatzbeitragssatz | %, ≥ 0 | official average for the year (1.6 % in 2023, 1.7 % in 2024, 2.5 % in 2025, 2.9 % in 2026) | GKV only. The user should enter their kassenindividueller Satz; the default is the BMG average, which can be below the actual weighted average. |
 | PKV premium | PKV-Beitrag monatlich | EUR | empty, required if PKV | Cash outflow. |
 | PKV Basis share | davon Basis-KV (steuerlich abziehbar), monatlich | EUR | empty, required if PKV | Must be ≤ premium. This is the insurer-certified deductible portion. |
 | Private PV | Private Pflegepflichtversicherung monatlich | EUR | empty, required if PKV | Cash outflow; fully deductible as Basis-PV. |
@@ -108,7 +152,11 @@ All money values in EUR with two decimals (income tax itself is a whole euro, di
 | Output | UI label | Definition |
 |---|---|---|
 | Net income, annual | **Netto-Einkommen (Jahr)** | Gewinn − all cash outflows (Section 6.10). The primary result. |
-| Net income, monthly | **Netto-Einkommen (Monat)** | Annual Netto / 12, commercially rounded. |
+| Net income, monthly | **Netto-Einkommen (Monat)** | Annual Netto / 12, commercially rounded. In multi-year mode, this is the monthly equivalent of that year’s Netto, or of the three-year average when shown in the average column. |
+| **Three-year average Netto, annual** | **Dreijahresdurchschnitt (Jahr)** | `(Netto(Y1)+Netto(Y2)+Netto(Y3))/3`, commercial cents. The **headline result in multi-year mode**. Must carry the label in Section 1.1. |
+| Three-year average Netto, monthly | **Dreijahresdurchschnitt (Monat)** | Average annual Netto / 12, commercial cents. |
+| Average of each line | Durchschnitt je Position | Arithmetic mean of ESt, Soli, KiSt, GewSt, KV, PV, RV, AV, and of Gewinn, over the three years, so the average breakdown adds up. |
+| Per-year breakdown | Ergebnis je Jahr | The full Section 5 breakdown for each of the three years, side by side or stacked, including any Steuerbescheid override flag. |
 | Income tax | Festzusetzende Einkommensteuer | After the § 35 credit. For married couples, show both the **joint** tax and the **user’s share** (Section 6.7). Netto uses the user’s share. |
 | Solidarity surcharge | Solidaritätszuschlag | User’s share if married. |
 | Church tax | Kirchensteuer | User’s share if married. |
@@ -121,7 +169,7 @@ All money values in EUR with two decimals (income tax itself is a whole euro, di
 | zvE | Zu versteuerndes Einkommen | After deductions, user’s zvE (and joint zvE if married). |
 | Tarifliche ESt | Tarifliche Einkommensteuer | Before § 35. |
 | Deductible Vorsorge | Abziehbare Vorsorgeaufwendungen | Informational. |
-| Effective burden | Effektive Gesamtbelastung | (Gewinn − Netto) / Gewinn × 100, two decimals. Undefined if Gewinn is 0; show „—“. |
+| Effective burden | Effektive Gesamtbelastung | (Gewinn − Netto) / Gewinn × 100, two decimals. Undefined if Gewinn is 0; show „—“. In multi-year mode, (average burden) / (average Gewinn). |
 | Marginal burden | Effektive Grenzbelastung | [TotalBurden(Gewinn+100) − TotalBurden(Gewinn)] / 100, as a percentage with two decimals. Re-run the **entire** pipeline at Gewinn+100. Using +100 € avoids one-euro rounding noise. |
 | Statutory marginal rate | Tariflicher Grenzsteuersatz | 0 / 14–23.97 % / 23.97–42 % / 42 % / 45 %, according to the zone of the final (user, or half-of-joint) zvE. Informational. |
 | Assessment bases | Beitragsbemessung KV/PV, RV | Shown in the breakdown so the user sees a clamp to the minimum or the BBG. |
@@ -145,7 +193,9 @@ Load the block for the selected year from the single parameter file (Section 7).
 For GKV (and statutory PV):
 
 ```
-annual_min = Bezugsgröße_year / 3          # exact: 15,820 (2026), 14,980 (2025)
+annual_min = Bezugsgröße_year / 3          # exact: 15,820 (2026), 14,980 (2025);
+                                          # 2024 West 14,140 / Ost 13,860; 2023 West 13,580 / Ost 13,160.
+                                          # For 2023–2024 use the Bezugsgröße of the chosen Rechtskreis.
 annual_bbg = BBG_KV_year                   # 69,750 (2026), 66,150 (2025)
 bemessung  = clamp(Gewinn, annual_min, annual_bbg)
 ```
@@ -184,6 +234,35 @@ No automatic 4 % cut: the Basis share is already the insurer-certified deductibl
 ### 6.4 PV cash and deductible amount
 
 **Statutory PV** (together with GKV), full rate paid by the self-employed (employer/employee split and the Sachsen split do **not** apply):
+
+The general (base) rate and the child-related additions depend on the year. **2025 and 2026** use the 3.6 % base (PBAV 2025). **2024** uses the 3.4 % base (PUEG, in force from 1 July 2023 through 31 December 2024). **2023 is split:** 1 January–30 June at the pre-PUEG rates, 1 July–31 December at the PUEG rates; the calculator uses a **6/12 + 6/12 weighted annual rate** (equal months). This is the correct annualisation for a full calendar year. A mid-year start or a mid-year change in the number of children is out of scope.
+
+**2023 first half (1 Jan–30 Jun):** general rate 3.05 %, childless surcharge (age 23+) 0.35 pp, **no** Abschlag for further children. Childless 23+: 3.40 %; everyone with Elterneigenschaft, and childless under 23: 3.05 %.
+
+**2023 second half (1 Jul–31 Dec) and all of 2024:** general rate 3.40 %, childless surcharge 0.60 pp, Abschlag −0.25 pp for each of the 2nd to 5th child under 25. Childless 23+: 4.00 %; 1 child (lifelong) or under 23 childless: 3.40 %; 2 children: 3.15 %; 3: 2.90 %; 4: 2.65 %; 5+: 2.40 %. Source: PUEG of 19 June 2023, in force 1 July 2023; BMG, <https://www.bundesgesundheitsministerium.de/presse/pressemitteilungen/pflegereform-beschluss-bundestag-26-05-23>.
+
+**2023 weighted annual rates** `(H1 + H2) / 2`:
+
+| Situation | H1 | H2 | **2023 annual** |
+|---|---|---|---|
+| Under 23, no children | 3.05 % | 3.40 % | **3.225 %** |
+| Age 23+, childless | 3.40 % | 4.00 % | **3.70 %** |
+| Elterneigenschaft, 0 or 1 child under 25 | 3.05 % | 3.40 % | **3.225 %** |
+| 2 children under 25 | 3.05 % | 3.15 % | **3.10 %** |
+| 3 children under 25 | 3.05 % | 2.90 % | **2.975 %** |
+| 4 children under 25 | 3.05 % | 2.65 % | **2.85 %** |
+| 5 or more children under 25 | 3.05 % | 2.40 % | **2.725 %** |
+
+**2024 (full year):**
+
+| Situation | Rate |
+|---|---|
+| Under 23, no children | 3.4 % |
+| Age 23+, childless | 4.0 % = 3.4 % + 0.6 % |
+| Elterneigenschaft, 0 or 1 child under 25 | 3.4 % (lifelong for one child) |
+| 2 / 3 / 4 / 5+ children under 25 | 3.15 % / 2.90 % / 2.65 % / 2.40 % |
+
+**2025 and 2026:**
 
 | Situation | Rate |
 |---|---|
@@ -366,11 +445,40 @@ marginal_%   = (total_burden(Gewinn+100) - total_burden(Gewinn)) / 100 × 100
 
 Do not subtract the § 35 credit as a separate cash item: it already reduced `est_user`.
 
+### 6.11 Multi-year average
+
+```
+function calculateNetto(input: YearInput): YearResult     // one year, Sections 6.1–6.10
+function calculateNettoAverage(years: YearInput[]): MultiYearResult
+```
+
+`years` is a list of **three** `YearInput` values for **consecutive** calendar years, each with its own `year`, `gewinn`, optional tax override, and optional year-specific Zusatzbeitrag (default: that year’s official average). Personal facts (married, church, children, KV type, RV mode, Rechtskreis) are typically shared but may differ per year if the user sets them.
+
+For each element, run the full single-year pipeline with **that year’s parameter block**. Then:
+
+```
+avg(x)        = commercial_round_cents( (x(Y1)+x(Y2)+x(Y3)) / 3 )
+avg_netto     = avg(Netto)
+avg_monthly   = commercial_round_cents(avg_netto / 12)
+avg_effective = avg(total_burden) / avg(Gewinn) × 100
+```
+
+Also average each cash-outflow line. Reject a list that is not three consecutive supported years (2023–2026). The core does not invent a “blended” tariff: there is no such legal object.
+
+### 6.12 Steuerbescheid override
+
+Each year may optionally supply `override_est`, `override_soli` and `override_kist` (festzusetzende Einkommensteuer, Solidaritätszuschlag, Kirchensteuer as assessed). If **any** of the three is present, the provided values **replace** the calculated amounts as cash outflows for that year (a missing one of the three is treated as 0 only if the user explicitly set the group; otherwise keep the calculated value for the unset field — implementation: if the user opens the override and fills a subset, use 0 for a blank Soli/KiSt and the entered ESt). The UI should pre-fill the calculated amounts so a partial edit is obvious.
+
+- Social contributions, GewSt and the § 35 *calculation* still run, for the breakdown and for deductible Vorsorge (zvE is still computed). The **Netto** uses the overridden taxes, not the calculated ones.
+- The KiSt iteration is skipped for the cash amount (the Bescheid already resolved it).
+- Show both “berechnet” and “laut Steuerbescheid” when an override is active.
+- This is closer to the Unterhalt “Steuern, die tatsächlich festgesetzt bzw. gezahlt wurden” idea, but it is still the **assessed** tax for that Veranlagungszeitraum, not a reconstruction of Vorauszahlungen and Nachzahlungen in the payment year (In-Prinzip). Do not claim otherwise.
+
 ---
 
 ## 7. Parameter tables
 
-Every value below is taken from an official source. If a later official change contradicts this table, the enacted law wins and this file must be updated in one place: the parameter module.
+Every value below is taken from an official source. If a later official change contradicts this table, the enacted law wins and this file must be updated in one place: the parameter module. Sections 7.1–7.8 tabulate 2025 and 2026; **Section 7.10** tabulates 2023 and 2024 (including the West/Ost Rechtskreis and the mid-2023 PV change).
 
 ### 7.1 Einkommensteuer, § 32a EStG
 
@@ -484,14 +592,108 @@ Cross-check, 2026, official average Zusatzbeitrag, BMG table: Höchstbeitrag erm
 | AV on request, monthly full | 97.37 € | 102.83 € | § 345b SGB III, <https://www.gesetze-im-internet.de/sgb_3/__345b.html>: Bezugsgröße × 2.6 %. 3,955 × 0.026 = 102.83; 3,745 × 0.026 = 97.37. |
 | AV Anlaufphase, monthly | 48.69 € | 51.42 € | § 345b Satz 2: half Bezugsgröße, in the calendar year of starting and the following calendar year. 1,977.50 × 0.026 = 51.415 → 51.42; 1,872.50 × 0.026 = 48.685 → 48.69. |
 
+
+### 7.10 Parameter tables for 2023 and 2024
+
+All social-insurance Rechengrößen for these two years still distinguish **Rechtskreis West and Ost** for the Bezugsgröße and the RV-BBG (the KV-BBG / JAEG after § 6 Abs. 7 SGB V is already nationwide). From 2025 the Bezugsgröße is unified; the 2025–2026 tables above apply nationwide. **Default Rechtskreis: West.** Golden tests use West unless stated.
+
+#### Einkommensteuer, § 32a
+
+Rounding is identical to Section 7.1 (zvE down to a euro; tax down to a euro).
+
+**2023** — Inflation Adjustment Act (Inflationsausgleichsgesetz) of 8 December 2022, BGBl. I 2022 S. 2230; official wording in LStH 2023 and the DRV historical statute, <https://rvrecht.deutsche-rentenversicherung.de/SharedDocs/rvRecht/05_Normen_und_Vertraege/02_C-K/EStG/0032a/0032a_2023_01_01.html>.
+
+| Zone | zvE from | to | Formula |
+|---|---|---|---|
+| 1 | 0 | 10,908 (Grundfreibetrag) | 0 |
+| 2 | 10,909 | 15,999 | `(979.18 × y + 1,400) × y` with `y = (zvE − 10,908) / 10,000` |
+| 3 | 16,000 | 62,809 | `(192.59 × z + 2,397) × z + 966.53` with `z = (zvE − 15,999) / 10,000` |
+| 4 | 62,810 | 277,825 | `0.42 × x − 9,972.98` |
+| 5 | 277,826 and above | — | `0.45 × x − 18,307.73` |
+
+**2024** — final enacted tariff, Grundfreibetrag **11,784** (the mid-year Gesetz zur steuerlichen Freistellung des Existenzminimums 2024 raised it retrospectively from the earlier InflAusG figure of 11,604; implement the **final** formulae). Official text: EStH 2024 (BMF), <https://esth.bundesfinanzministerium.de/esth/2024/A-Einkommensteuergesetz/IV-Tarif-31-34b/Paragraf-32a/paragraf-32a.html>.
+
+| Zone | zvE from | to | Formula |
+|---|---|---|---|
+| 1 | 0 | 11,784 (Grundfreibetrag) | 0 |
+| 2 | 11,785 | 17,005 | `(954.80 × y + 1,400) × y` with `y = (zvE − 11,784) / 10,000` |
+| 3 | 17,006 | 66,760 | `(181.19 × z + 2,397) × z + 991.21` with `z = (zvE − 17,005) / 10,000` |
+| 4 | 66,761 | 277,825 | `0.42 × x − 10,636.31` |
+| 5 | 277,826 and above | — | `0.45 × x − 18,971.06` |
+
+#### Solidaritätszuschlag
+
+Rate, Milderung and rounding as in Section 7.2. Freigrenzen:
+
+| Item | 2023 | 2024 | Source |
+|---|---|---|---|
+| Freigrenze, single | 17,543 € | 18,130 € | Inflationsausgleichsgesetz of 8.12.2022; BMF Monatsbericht Januar 2024, <https://www.bundesfinanzministerium.de/Monatsberichte/2024/01/Inhalte/Kapitel-3-Analysen/3-5-entlastungen-bei-der-einkommensteuer-soli-und-dem-kindergeld.html>. LStH 2024. |
+| Freigrenze, joint | 35,086 € | 36,260 € | same. A third-party NRW leaflet has been seen with 36,250 € for 2024 joint — that is a **typo**; the enacted figure is **36,260**. |
+
+#### Sonderausgaben
+
+Altersvorsorge 100 % deductible from **2023** (§ 10 Abs. 3 Satz 6 EStG). Höchstbetrag = ceil(knappschaftliche BBG West × 24.7 %):
+
+| Item | 2023 | 2024 |
+|---|---|---|
+| Höchstbetrag Altersvorsorge, single | **26,528 €** = ceil(107,400 × 24.7 %) | **27,566 €** = ceil(111,600 × 24.7 %) |
+| Höchstbetrag, joint | 53,056 € | 55,132 € |
+| Sonstige Vorsorge cap, self-employed | 2,800 € | 2,800 € |
+| Sonderausgaben-Pauschbetrag | 36 € / 72 € | 36 € / 72 € |
+| Kinderfreibetrag, one parent (sächlich + BEA) | 4,476 € (3,012 + 1,464) | 4,770 € (3,306 + 1,464) |
+| Kinderfreibetrag, both parents | 8,952 € | 9,540 € |
+
+Kinderfreibetrag source: § 32 Abs. 6 EStG in the year’s version; BMBFSFJ family-benefit overviews.
+
+#### Gesetzliche Krankenversicherung (rates 14.6 % / 14.0 % unchanged)
+
+| Item | 2023 | 2024 | Source |
+|---|---|---|---|
+| Official average Zusatzbeitrag (BMG) | **1.6 %** | **1.7 %** | Official BMG average. GKV-Spitzenverband, <https://www.gkv-spitzenverband.de/krankenversicherung/kv_grundprinzipien/finanzierung/zusatzbeitragssatz/zusatzbeitragssatz.jsp>, records the rise to 1.7 % in 2024 (and later to 2.5 % / 2.9 %). |
+| BBG KV/PV, annual / monthly | 59,850 € / 4,987.50 € | 62,100 € / 5,175 € | Equals JAEG after § 6 Abs. 7 SGB V. SVBezGrV 2023, BGBl. I 2022 S. 2128; SVBezGrV 2024, BGBl. 2023 I Nr. 322. Nationwide. |
+| Bezugsgröße West, annual / monthly | 40,740 € / 3,395 € | 42,420 € / 3,535 € | SVBezGrV 2023 / 2024 § 1 |
+| Bezugsgröße Ost, annual / monthly | 39,480 € / 3,290 € | 41,580 € / 3,465 € | same |
+| Mindestbemessung West, annual | 13,580 € | 14,140 € | Bezugsgröße / 3, exact |
+| Mindestbemessung Ost, annual | 13,160 € | 13,860 € | same |
+| Mindestbemessung West, monthly (display) | 1,131.67 € | 1,178.33 € | monthly Bezugsgröße / 3, cents |
+| Mindestbemessung Ost, monthly (display) | 1,096.67 € | 1,155.00 € | 3,465 / 3 is exact in 2024 |
+
+#### Pflegeversicherung — 2023 mid-year change
+
+PUEG of 19 June 2023, in force **1 July 2023**, raised the general rate from 3.05 % to 3.40 %, the childless surcharge from 0.35 pp to 0.60 pp, and introduced the Abschlag for the 2nd–5th child. Full annual rates: Section 6.4. **Product rule:** a full calendar year 2023 uses the **equal-month (6/12 + 6/12) weighted** rates in that table; childless 23+ is **3.70 %**. Do not use a figure that applies the H1 childless rate as 3.05 % (that would be wrong: H1 childless 23+ is 3.05 + 0.35 = **3.40 %**).
+
+**2024** is PUEG rates for the whole year (base 3.4 %, childless 4.0 %). The 3.6 % base starts only on 1 January 2025 (PBAV 2025).
+
+#### Rentenversicherung and Arbeitslosenversicherung
+
+RV rate 18.6 %, knappschaft 24.7 %, AV 2.6 % (§ 341 Abs. 2 SGB III, in force since 1.1.2023 after the BeiSaV expired) — all unchanged.
+
+| Item | 2023 West | 2023 Ost | 2024 West | 2024 Ost |
+|---|---|---|---|---|
+| BBG allgemeine RV, annual / monthly | 87,600 / 7,300 | 85,200 / 7,100 | 90,600 / 7,550 | 89,400 / 7,450 |
+| BBG knappschaftlich (West used for § 10 cap) | 107,400 | 105,000 | 111,600 | 109,200 |
+| Regelbeitrag, monthly | 631.47 € | 611.94 € | 657.51 € | 644.49 € |
+| Pflicht / freiwillig max, monthly | 1,357.80 € | 1,320.60 € | 1,404.30 € | 1,385.70 € |
+| Pflicht / freiwillig min, monthly | **96.72 €** | same (Geringfügigkeit is nationwide) | **100.07 €** | same |
+| AV full, monthly | 88.27 € | 85.54 € | 91.91 € | 90.09 € |
+| AV Anlaufphase, monthly | 44.14 € | 42.77 € | 45.96 € | 45.05 € |
+
+Regelbeitrag = monthly Bezugsgröße × 18.6 %, commercial cents. Min = Geringfügigkeitsgrenze × 18.6 % (520 € in 2023, 538 € in 2024; Minijob-Zentrale / DRV). Max = monthly RV-BBG × 18.6 %. AV = Bezugsgröße × 2.6 % (half in Anlaufphase). Knappschaftliche BBG Ost is listed for completeness; the § 10 Höchstbetrag in this SPEC uses the West knappschaft BBG (the established nationwide tax-law figure) for both Rechtskreise.
+
+Sources: SVBezGrV 2023, <https://www.gesetze-im-internet.de/svbezgrv_2023/>; SVBezGrV 2024, <https://www.gesetze-im-internet.de/svbezgrv_2024/>.
+
 ### 7.9 Values that are not guessed
 
-No parameter in the tables above is marked UNVERIFIED. The following are **specified product rules**, not unverified law:
+No legal parameter in the tables above (including Section 7.10) is marked UNVERIFIED. The following are **specified product rules**, not unverified law:
 
 - Kirchensteuer rounding: commercially to cents. Some Länder round to a whole euro; a 1-euro difference is possible.
 - KiSt combined with Kinderfreibetrag is not in the golden tests (Section 6.9).
 - Spouse-zvE simplifications (Sections 4 and 6.7).
-- 2025 voluntary RV min 103.42 € is computed from the same official method DRV publishes for 2026, not from a separate 2025 DRV press line.
+- 2025 voluntary RV min 103.42 € is computed from the same official method DRV publishes for 2026, not from a separate 2025 DRV press line. The 2023 (96.72 €) and 2024 (100.07 €) minima use the same method.
+- **2023 PV annualisation:** equal calendar halves (6/12 + 6/12) for a full-year insured person (Section 6.4). Mid-year start of insurance or a mid-year change in the number of children is out of scope.
+- **Steuerbescheid override** substitutes assessed tax, not a reconstruction of payments in the payment year (Section 6.12).
+- Default Rechtskreis West; Berlin is not auto-assigned.
+- The three-year average itself is the product rule of Section 1.1, not a statute that binds Elterngeld or the Jobcenter.
 
 ---
 
@@ -527,11 +729,12 @@ When 2027 is enacted, add a third block to the single parameter file and extend 
 Already decided; refine only as follows.
 
 - **One static web app, no backend.** TypeScript, Vite. Deploy to GitHub Pages (`vite build`, configurable `base`).
-- **Pure calculation module, separate from the UI.** The UI imports one function, e.g. `calculateNetto(input): Result`. The function is deterministic, has no I/O, and is the only place the pipeline lives.
-- **Year parameters in one data file** (e.g. `src/netto/params.ts`) with a `2025` and a `2026` block. A yearly legal update must not require touching the pipeline, only this file (and new golden tests).
+- **Pure calculation module, separate from the UI.** The UI imports `calculateNetto(input): YearResult` and `calculateNettoAverage(years: YearInput[]): MultiYearResult` (Section 6.11). Both are deterministic, have no I/O, and are the only place the pipeline lives.
+- **Year parameters in one data file** (e.g. `src/netto/params.ts`) with a `2023`, `2024`, `2025` and `2026` block. For 2023–2024 the block includes West and Ost Bezugsgröße and RV-BBG; a resolver picks the Rechtskreis. A yearly legal update must not require touching the pipeline, only this file (and new golden tests).
 - **Decimal arithmetic** in the core. Vitest tests the core, including every golden case in Section 11 and the isolated tariff table.
-- **German UI**, vanilla TypeScript + HTML + CSS is preferred (no React/Vue requirement). Accessible labels, `de-DE` number formatting, the disclaimer in the footer.
-- **Optional CLI** (`src/cli/`) wrapping the same `calculateNetto`. Nice-to-have.
+- **German UI**, vanilla TypeScript + HTML + CSS is preferred (no React/Vue requirement). Accessible labels, `de-DE` number formatting, the disclaimer and the **privacy note** (see Privacy below) in the footer. Default view: multi-year mode (Section 3).
+- **Optional CLI** (`src/cli/`) wrapping the same `calculateNetto` and `calculateNettoAverage`. Nice-to-have.
+- **Privacy is a hard requirement.** See the section *Privacy (hard requirement)* immediately below. A correct calculation that stores data, talks to a server, or loads a third-party font **fails acceptance**.
 - **No plugin framework, no calculator registry.** The only planned second product is Kindesunterhalt. Share only what the two will actually share:
   - Vite / TypeScript / GitHub Pages tooling
   - `de-DE` number formatting
@@ -563,6 +766,55 @@ netto-calc/
 
 - README: how to run, how to deploy, the disclaimer, and a one-line pointer at SPEC.md.
 - License and repo location are the product owner’s choice; GitHub Pages is the deploy target.
+
+---
+
+
+## Privacy (hard requirement)
+
+This is a **non-negotiable product requirement**. A build that calculates correctly but violates any of the following **fails acceptance**.
+
+### Principles
+
+- **100 % client-side, no backend.** The app is a static site. There is no application server, no API, no serverless function, and no telemetry endpoint. After the static host (GitHub Pages or equivalent) has delivered the HTML, CSS, JavaScript and other self-hosted assets, the app runs entirely in the browser.
+- **No persistence of user data.** The app must not read or write **cookies**, **localStorage**, **sessionStorage**, or **IndexedDB** (nor Cache Storage for form data, nor a silent File System Access write). A reload starts from empty fields (year defaults excepted). Do not “helpfully” remember the last Gewinn.
+- **No form values in the URL.** Do not use a query string, a hash route, or a path segment to store or share inputs. After use, the address bar is the address of the app itself.
+- **`autocomplete="off"`** on the form and on every input that takes a financial or personal value (Gewinn, premiums, Steuerbescheid amounts).
+- **No analytics and no third-party resources.** No Google Fonts, no CDN (no jsDelivr, unpkg, cdnjs, Google Analytics, Matomo hosted elsewhere, Plausible, Sentry, or similar). **Everything is self-hosted:** fonts (system fonts are preferred and sufficient), scripts, styles, icons. The only network activity is the initial page load from the app’s own origin.
+- **Content-Security-Policy**, as an HTTP header and as an equivalent `<meta http-equiv="Content-Security-Policy">` (GitHub Pages cannot always set custom headers; the meta tag must still enforce the policy):
+
+```
+default-src 'self';
+connect-src 'none';
+form-action 'none';
+base-uri 'self';
+object-src 'none';
+frame-ancestors 'none';
+```
+
+together with **Referrer-Policy: no-referrer** (HTTP and `<meta name="referrer" content="no-referrer">`).
+
+`script-src` and `style-src` may be `'self'` only. If a tiny inline script or style is unavoidable, it must be covered by a **hash** (`'sha256-…'`), never by `'unsafe-inline'`. No `'unsafe-eval'`. `img-src 'self'` (and `data:` only if a local icon requires it). `font-src 'self'`. `worker-src 'none'` (or `'self'` if a same-origin worker is used). `manifest-src 'self'`.
+
+`connect-src 'none'` forbids `fetch`, XHR, WebSocket, EventSource and Beacon to **any** origin, including the app’s own. That is intentional: the calculator never needs to talk to a server after load.
+
+`form-action 'none'`: the form must not submit. Calculation is in-page JavaScript on input, or a button that does not navigate.
+
+Vite must not inject a third-party analytics snippet. If source maps are published, they must be same-origin.
+
+- **German privacy note in the UI**, visible without a separate click if possible (a footer that is visible on the results view is acceptable), with this wording or a close equivalent:
+
+> **Datenschutz:** Diese Anwendung läuft vollständig in Ihrem Browser. Es gibt keinen Server, der Ihre Angaben entgegennimmt. Es werden keine Cookies gesetzt und keine Daten im Browser gespeichert (kein localStorage, sessionStorage oder IndexedDB). Ihre Eingaben stehen nicht in der Adresszeile und werden nicht an Dritte übermittelt. Es gibt keine Analyse- oder Trackingdienste. Nach dem Schließen oder Neuladen der Seite sind die Eingaben gelöscht.
+
+### QA acceptance (mandatory)
+
+1. After the **initial page load** (the document plus its same-origin static assets), the browser’s network panel records **zero further network requests** — no telemetry, no webfont, no third-party favicon, no source map from another host, no CSP-report endpoint. A single same-origin favicon requested as part of the initial load is acceptable if it is self-hosted.
+2. After typical use (enter three years of Gewinn, change options, view results, optionally override taxes), **storage is empty**: no cookies, empty `localStorage`, empty `sessionStorage`, no IndexedDB database created by the app.
+3. The address bar contains no query or hash that encodes form values.
+4. The CSP and Referrer-Policy are present and would block a third-party or `connect` request if one were attempted.
+5. The German privacy note is visible.
+
+A failure of any of these is a **release blocker**.
 
 ---
 
@@ -617,6 +869,50 @@ These are zvE → tarifliche ESt only. QA should check a sample against <https:/
 | 400,000 | 5 | 160,753.33 | 160,753 |
 
 **2025, Splitting:** joint 80,000 → **14,640**. Joint 160,000 → **45,376**.
+
+**2024, Grundtarif**
+
+| zvE | Zone | raw | ESt |
+|---|---|---|---|
+| 0 | 1 | 0 | 0 |
+| 11,784 | 1 | 0 | 0 |
+| 11,785 | 2 | 0.1400095480 | 0 |
+| 17,005 | 2 | 991.2074138680 | 991 |
+| 17,006 | 3 | 991.4497018119 | 991 |
+| 30,000 | 3 | 4,412.0870982975 | 4,412 |
+| 50,000 | 3 | 10,872.6727182975 | 10,872 |
+| 66,760 | 3 | 17,402.9507092975 | 17,402 |
+| 66,761 | 4 | 17,403.31 | 17,403 |
+| 80,000 | 4 | 22,963.69 | 22,963 |
+| 277,825 | 4 | 106,050.19 | 106,050 |
+| 277,826 | 5 | 106,050.64 | 106,050 |
+| 400,000 | 5 | 161,028.94 | 161,028 |
+
+**2024, Splitting:** joint zvE 80,000 → **14,922**. Joint 160,000 → **45,926**.
+
+**2023, Grundtarif**
+
+| zvE | Zone | raw | ESt |
+|---|---|---|---|
+| 0 | 1 | 0 | 0 |
+| 10,908 | 1 | 0 | 0 |
+| 10,909 | 2 | 0.1400097918 | 0 |
+| 15,999 | 2 | 966.5266238958 | 966 |
+| 16,000 | 3 | 966.7697019259 | 966 |
+| 30,000 | 3 | 4,700.1000271259 | 4,700 |
+| 50,000 | 3 | 11,343.0410631259 | 11,343 |
+| 62,809 | 3 | 16,406.87305099 | 16,406 |
+| 62,810 | 4 | 16,407.22 | 16,407 |
+| 80,000 | 4 | 23,627.02 | 23,627 |
+| 277,825 | 4 | 106,713.52 | 106,713 |
+| 277,826 | 5 | 106,713.97 | 106,713 |
+| 400,000 | 5 | 161,692.27 | 161,692 |
+
+**2023, Splitting:** joint zvE 80,000 → **15,656**. Joint 160,000 → **47,254**.
+
+**Isolated Soli, 2023, single, no children** (Freigrenze 17,543): ESt 17,543 → 0; ESt 18,760 → floor_cents(min(1,031.800, 0.119 × 1,217 = 144.823)) = **144.82** (Milderung).
+
+**Isolated Soli, 2024, single, no children** (Freigrenze 18,130): ESt 17,810 → **0**; ESt 18,130 → 0; ESt 18,131 → 0.11.
 
 **Isolated Soli, 2026, single, no children** (on festzusetzende ESt):
 
@@ -845,13 +1141,64 @@ The required set is **G1–G16** (16 cases). G17 and G18 are recommended. Togeth
 
 ### 11.3 Other tests the developer must include
 
-- Parameter-file completeness: every year block has every key; missing a year throws a clear error.
-- Validation: Basis share > PKV premium is rejected; voluntary RV outside min/max is rejected; empty required Gewinn does not produce a fake result.
+- Parameter-file completeness: every year block (2023, 2024, 2025, 2026) has every key; missing a year throws a clear error. 2023–2024 blocks include West and Ost Rechengrößen.
+- Validation: Basis share > PKV premium is rejected; voluntary RV outside min/max is rejected; empty required Gewinn does not produce a fake result; `calculateNettoAverage` rejects a list that is not three consecutive supported years.
 - Gewinn 0, GKV: contributions at the minimum, ESt 0, Netto negative.
 - Changing only the Zusatzbeitrag changes KV cash (and zvE, and ESt) in the expected direction.
 - Freiberufler never produces GewSt, regardless of Gewinn and Hebesatz.
-- PV rates for 0 (under 23), 0 (23+), 1, 2, 3, 4, 5, 6 children (6 same as 5).
+- PV rates for 0 (under 23), 0 (23+), 1, 2, 3, 4, 5, 6 children (6 same as 5), **for every year 2023–2026**. In particular 2023 childless 23+ is **3.70 %** (not 3.525 %); 2023 with 1 child is **3.225 %**; 2024 childless 23+ is **4.0 %**; 2025–2026 childless 23+ is **4.2 %**.
 - G4 Netto === G14 Netto; G5 burden === G4 burden + 1,942.50; G17 burden === G14 burden + 1,233.96.
+- 2023 GKV minimum, Rechtskreis Ost vs West, Gewinn 10,000, otherwise G1 defaults: West Bemessung 13,580, KV 2,118.48, PV 502.46, Netto **7,379.06**; Ost Bemessung 13,160, KV 2,052.96, PV 486.92, Netto **7,460.12**. ESt is 0 in both.
+- Privacy: the QA acceptance criteria in the Privacy section (zero network after first load; empty storage after use; no form values in the URL; CSP and privacy note present).
+
+### 11.4 Golden multi-year cases
+
+Common defaults as in Section 11, plus Rechtskreis West. Expected values from `reference_calc.py` with Python `Decimal`. Assert the per-year intermediates **and** the three-year averages. At least these four cases are required.
+
+#### M1 — 2024–2026, equal Gewinn 80,000 (same facts as G14 / G11)
+
+Three years, Freiberufler, childless 23+, GKV ermäßigt, official Zusatz, no RV, no KiSt.
+
+**2024:** Bemessung = 62,100 (BBG). KV = 62,100 × 15.7 % = **9,749.70**. PV = 62,100 × 4.0 % = **2,484.00**. Vorsorge 12,233.70. zvE = floor(80,000 − 12,233.70 − 36) = **67,730**. ESt = floor(0.42 × 67,730 − 10,636.31) = **17,810** (zone 4). Soli = 0 (17,810 ≤ Freigrenze 18,130). Burden 30,043.70. **Netto 49,956.30**. Monthly 4,163.03. Effective 37.55 %.
+
+**2025:** identical to **G11**: KV 10,914.75; PV 2,778.30; ESt 16,930; Soli 0; Burden 30,623.05; **Netto 49,376.95**.
+
+**2026:** identical to **G14**: KV 11,787.75; PV 2,929.50; ESt 16,304; Soli 0; Burden 31,021.25; **Netto 48,978.75**.
+
+**Expected averages:** Gewinn 80,000.00; ESt 17,014.67; Soli 0.00; KV 10,817.40; PV 2,730.60; Burden 30,562.67; **Dreijahres-Netto 49,437.33**; monthly 4,119.78; effective 38.20 %.
+
+#### M2 — 2023–2025, equal Gewinn 80,000 (includes mid-2023 PV)
+
+Same facts. **2023** uses the weighted PV rate **3.70 %** and Zusatz **1.6 %**.
+
+**2023:** Bemessung = 59,850 (BBG). KV = 59,850 × 15.6 % = **9,336.60**. PV = 59,850 × 3.70 % = **2,214.45**. Vorsorge 11,551.05. zvE = floor(80,000 − 11,551.05 − 36) = **68,412**. ESt = floor(0.42 × 68,412 − 9,972.98) = **18,760** (zone 4; raw 18,760.06). Soli = floor_cents(min(0.055 × 18,760 = 1,031.800, 0.119 × (18,760 − 17,543) = 144.823)) = **144.82** (Milderung). Burden 30,455.87. **Netto 49,544.13**. Monthly 4,128.68. Effective 38.07 %.
+
+**2024** and **2025:** as in M1.
+
+**Expected averages:** Gewinn 80,000.00; ESt 17,833.33; Soli 48.27; KV 10,000.35; PV 2,492.25; Burden 30,374.21; **Dreijahres-Netto 49,625.79**; monthly 4,135.48; effective 37.97 %.
+
+#### M3 — 2023–2025, Steuerbescheid override on 2023
+
+Same as M2, except 2023 supplies `override_est = 18,500`, `override_soli = 0`, `override_kist = 0` (a hypothetical Bescheid that differs from the calculated 18,760 and 144.82). Social contributions stay calculated.
+
+**2023 with override:** KV 9,336.60; PV 2,214.45 (unchanged); ESt **18,500**; Soli **0**; Burden 30,051.05; **Netto 49,948.95**. The UI flags the override and can still show the calculated ESt 18,760 and Soli 144.82.
+
+**2024** and **2025:** as in M1. No override.
+
+**Expected averages:** ESt 17,746.67; Soli 0.00; KV 10,000.35; PV 2,492.25; Burden 30,239.27; **Dreijahres-Netto 49,760.73**; monthly 4,146.73; effective 37.80 %. The average Netto is 134.94 € higher than M2, which is exactly (144.82 + (18,760 − 18,500)) / 3 = 404.82 / 3, commercially rounded.
+
+#### M4 — 2023–2025, varying profits 50,000 / 80,000 / 120,000
+
+Same personal facts, Rechtskreis West.
+
+**2023, Gewinn 50,000:** Bemessung = 50,000 (between min 13,580 and BBG 59,850). KV = 50,000 × 15.6 % = **7,800.00**. PV = 50,000 × 3.70 % = **1,850.00**. Vorsorge 9,650.00. zvE = floor(50,000 − 9,650 − 36) = **40,314**. ESt = **7,933** (zone 3; raw 7,933.4646…). Soli = 0 (7,933 ≤ 17,543). Burden 17,583.00. **Netto 32,417.00**.
+
+**2024, Gewinn 80,000:** as in M1, **Netto 49,956.30**.
+
+**2025, Gewinn 120,000:** Bemessung = 66,150 (BBG). KV = **10,914.75**. PV = **2,778.30**. Vorsorge 13,693.05. zvE = floor(120,000 − 13,693.05 − 36) = **106,270**. ESt = floor(0.42 × 106,270 − 10,911.92) = **33,721** (zone 4; raw 33,721.48). Soli = floor_cents(min(0.055 × 33,721 = 1,854.655, 0.119 × (33,721 − 19,950) = 1,638.749)) = **1,638.74** (Milderung). Burden 49,052.79. **Netto 70,947.21**.
+
+**Expected averages:** Gewinn 83,333.33; ESt 19,821.33; Soli 546.25; KV 9,488.15; PV 2,370.77; Burden 32,226.50; **Dreijahres-Netto 51,106.84**; monthly 4,258.90; effective 38.67 %.
+
 
 ---
 
@@ -865,6 +1212,9 @@ The required set is **G1–G16** (16 cases). G17 and G18 are recommended. Togeth
 6. KSK is out of scope.
 7. Pflicht-RV exemption below the Geringfügigkeitsgrenze is not modelled; the minimum contribution is applied.
 8. The default Zusatzbeitrag is the official BMG average, which can be below the user’s kassenindividueller Satz.
+9. The three-year average is **not** the legal figure for Elterngeld or Bürgergeld (Section 1.1). The UI must say so.
+10. For 2023, PV is a 6+6-month weighted annual rate; a mid-year start of insurance is not modelled.
+11. A Steuerbescheid override substitutes assessed tax, not Vorauszahlungen and Nachzahlungen in the payment year.
 
 ---
 
@@ -874,7 +1224,7 @@ The only planned follow-up product is:
 
 - **Kindesunterhalt nach der Düsseldorfer Tabelle.**
 
-No other calculators. When that work starts, give it its own core and a short SPEC of its own; reuse only the shell and formatting (Section 10).
+No other calculators. When that work starts, give it its own core and a short SPEC of its own; reuse only the shell and formatting (Section 10). It will **consume this calculator’s three-year average Netto** (`MultiYearResult.avg_netto`, Section 1.1 and 6.11) as the starting “unterhaltsrelevantes Einkommen” of a self-employed parent. Further Unterhalt-specific Bereinigungen (Ansparabschreibungen, AfA only to the extent of a real loss of value, the In-Prinzip of tax payments, Umgangskosten, and so on) belong in the Unterhalt SPEC, not here.
 
 ---
 
@@ -882,6 +1232,7 @@ No other calculators. When that work starts, give it its own core and a short SP
 
 - Implement the pipeline in Section 6 exactly. If a golden-test expected value and a correct implementation of the pipeline ever disagree, stop and raise it — do not “fix” the test silently, and do not change the legal formulae to match a rounded guess.
 - `reference_calc.py` in this folder is a research aid that produced Section 11. The product is TypeScript. If the script and this SPEC ever disagree, **this SPEC wins**.
-- QA: run Vitest; manually spot-check Section 11.1 against the BMF calculator; walk through G1, G2, G4, G6, G8, G10, G14 in the UI (annual and monthly, disclaimer present, defaults, mobile width); confirm GitHub Pages builds as a static site.
+- QA: run Vitest, including every golden case in Sections 11.2 and 11.4 and the isolated tariff table (now for 2023–2026); manually spot-check Section 11.1 against the BMF calculator; walk through G1, G2, G4, G6, G8, G10, G14 and **M1–M4** in the UI (annual and monthly, three-year average labelled as in Section 1.1, disclaimer present, defaults, mobile width); confirm GitHub Pages builds as a static site.
+- QA **privacy** (release blocker): the five acceptance checks in the Privacy section — zero network requests after the initial page load, empty storage after use, no form values in the URL, CSP and Referrer-Policy present, German privacy note visible.
 - Do not contact tax offices, and do not present results as advice.
 
