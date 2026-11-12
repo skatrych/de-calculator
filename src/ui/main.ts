@@ -25,6 +25,12 @@ import {
   type YearInput,
   type YearResult,
 } from './api.ts';
+import {
+  defaultKfbZaehler,
+  formatKfbZaehler,
+  shouldResetKfbZaehler,
+  validateKfbZaehler,
+} from './kfb-zaehler.ts';
 
 const form = document.getElementById('calc-form') as HTMLFormElement;
 const gewinnFields = document.getElementById('gewinn-fields') as HTMLElement;
@@ -41,6 +47,8 @@ const kfbWrap = document.getElementById('kfb-wrap') as HTMLElement;
 const kfbInput = document.getElementById('kfb-zaehler') as HTMLInputElement;
 /** Once the user edits the Zähler, stop auto-following the default. */
 let kfbZaehlerTouched = false;
+/** Previous children count, used to detect a 0 → >0 transition (L1). */
+let previousChildrenCount = 0;
 const zusatzWrap = document.getElementById('zusatz-wrap') as HTMLElement;
 const zusatzInput = document.getElementById('zusatz') as HTMLInputElement;
 const zusatzHint = document.getElementById('zusatz-hint') as HTMLElement;
@@ -216,31 +224,30 @@ function rebuildOverrideFields(): void {
 }
 
 
-function defaultKfbZaehler(nChildren: number, married: boolean): number {
-  return nChildren * (married ? 1 : 0.5);
-}
-
-function formatKfbZaehler(n: number): string {
-  // 0.5 stays "0.5"; whole numbers as "0", "1", "2".
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
 function syncKfbZaehler(nChildren: number, married: boolean): void {
-  const max = nChildren; // × 1.0: at most the full KFB per child
-  kfbInput.min = '0';
-  kfbInput.max = String(max);
-  kfbInput.step = '0.5';
-  if (!kfbZaehlerTouched) {
+  // Do not set native min/max: they silently clamp typed values (L2).
+  kfbInput.removeAttribute('min');
+  kfbInput.removeAttribute('max');
+
+  if (shouldResetKfbZaehler(previousChildrenCount, nChildren)) {
+    // L1: children went from 0 to >0 (the Zähler was forced to 0 while
+    // hidden). Restore the default and resume auto-follow.
+    kfbZaehlerTouched = false;
     kfbInput.value = formatKfbZaehler(defaultKfbZaehler(nChildren, married));
+    previousChildrenCount = nChildren;
     return;
   }
-  const raw = kfbInput.value.trim().replace(',', '.');
-  const v = Number(raw);
-  if (!Number.isFinite(v) || v < 0) {
+  previousChildrenCount = nChildren;
+
+  if (nChildren === 0) {
     kfbInput.value = '0';
-  } else if (v > max) {
-    kfbInput.value = formatKfbZaehler(max);
+    return;
   }
+  if (!kfbZaehlerTouched) {
+    kfbInput.value = formatKfbZaehler(defaultKfbZaehler(nChildren, married));
+  }
+  // If the user edited the field, leave the typed value as-is. Out-of-range
+  // and wrong-step values are reported as a German error (L2), not clamped.
 }
 
 function updateVisibility(): void {
@@ -313,24 +320,9 @@ function parseOptionalEuro(raw: string, label: string, defaultValue = '0'): { ok
 function parseKfbZaehlerInput(
   raw: string,
   nChildren: number,
+  married: boolean,
 ): { ok: true; value: number } | { ok: false; message: string } {
-  const max = nChildren;
-  const text = raw.trim().replace(',', '.');
-  if (text === '') {
-    return { ok: true, value: defaultKfbZaehler(nChildren, (document.getElementById('married') as HTMLInputElement).checked) };
-  }
-  const v = Number(text);
-  const isStep = Number.isFinite(v) && Math.abs(v * 2 - Math.round(v * 2)) < 1e-9;
-  if (!Number.isFinite(v) || !isStep || v < 0 || v > max) {
-    return {
-      ok: false,
-      message:
-        max === 0
-          ? 'Der Kinderfreibetrag-Zähler muss 0 sein, wenn keine Kinder unter 25 angegeben sind.'
-          : `Der Kinderfreibetrag-Zähler muss ein Vielfaches von 0,5 zwischen 0 und ${String(max).replace('.', ',')} sein.`,
-    };
-  }
-  return { ok: true, value: v };
+  return validateKfbZaehler(raw, nChildren, married);
 }
 
 function sharedInputBase(): Omit<YearInput, 'year' | 'gewinn'> | { errors: string[] } {
@@ -381,7 +373,7 @@ function sharedInputBase(): Omit<YearInput, 'year' | 'gewinn'> | { errors: strin
   }
 
   const nChildren = Number(children.value);
-  const kfbParsed = parseKfbZaehlerInput(kfbInput.value, nChildren);
+  const kfbParsed = parseKfbZaehlerInput(kfbInput.value, nChildren, married);
   if (!kfbParsed.ok) errors.push(kfbParsed.message);
 
   if (errors.length) return { errors };

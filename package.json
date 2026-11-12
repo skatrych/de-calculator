@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "check:privacy": "node scripts/check-privacy.mjs",
     "cli": "node --experimental-strip-types src/cli/cli.ts",
-    "check:a11y": "node scripts/check-a11y.mjs"
+    "check:a11y": "node scripts/check-a11y.mjs",
+    "test:ui": "node scripts/check-ui.mjs"
   },
   "engines": {
     "node": ">=22"
