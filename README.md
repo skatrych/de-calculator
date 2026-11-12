@@ -19,7 +19,7 @@ Voraussetzung: Node.js 22 oder neuer.
 
 ```bash
 npm install
-npm test          # Vitest, alle Goldfälle G1–G19 und M1–M4 sowie der isolierte Tarif
+npm test          # Vitest, alle Goldfälle G1–G20 und M1–M4 sowie der isolierte Tarif
 npm run typecheck
 npm run dev       # http://localhost:5173/de-calculator/
 npm run build     # statische Seite nach dist/, Basis-Pfad /de-calculator/
@@ -47,6 +47,8 @@ Alle gesetzlichen Zahlen stehen in **einer** Datei: [`src/netto/params.ts`](src/
 - `calculateNettoAverage(years: YearInput[]): AverageOutcome` — drei aufeinander folgende Jahre, arithmetisches Mittel (`MultiYearResult.avg_netto`, Abschnitt 6.11). Das ist der Ausgangswert für den geplanten Kindesunterhalt-Rechner.
 
 Optionale Felder `override_est`, `override_soli`, `override_kist` ersetzen die festzusetzenden Steuern eines Jahres durch die Werte des Steuerbescheids.
+
+Optionales Feld `kfbZaehler` (Kinderfreibetrag-Zähler laut Steuerbescheid, Vielfaches von 0,5, höchstens gleich der Zahl der Kinder unter 25): steuert nur den Kinderfreibetrag für Soli und Kirchensteuer. Standard: Kinder unter 25 × 0,5 (unverheiratet) bzw. × 1,0 (verheiratet). Die Pflegeversicherung bleibt bei `childrenUnder25`.
 
 ## Deployment (GitHub Pages)
 

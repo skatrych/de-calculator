@@ -165,14 +165,16 @@
               <input id="age23" type="checkbox" checked autocomplete="off" />
               Mindestens 23 Jahre alt
             </label>
-            <label id="kfb-wrap" class="check is-hidden">
-              <input id="kfb-full" type="checkbox" autocomplete="off" />
-              Vollen Kinderfreibetrag übertragen
-              <span class="help">
-                <button type="button" class="help-btn" aria-describedby="tip-kfb" aria-label="Hilfe: Kinderfreibetrag">?</button>
-                <span id="tip-kfb" class="help-tip" role="tooltip">Nur für Solidaritätszuschlag und Kirchensteuer. Als Alleinstehende gilt standardmäßig der Anteil eines Elternteils. Haken setzen, wenn der andere Elternteil seinen Anteil übertragen hat. Bei Zusammenveranlagung gelten immer beide Anteile.</span>
-              </span>
-            </label>
+            <div id="kfb-wrap" class="field is-hidden">
+              <label for="kfb-zaehler">
+                Kinderfreibetrag-Zähler (laut Steuerbescheid)
+                <span class="help">
+                  <button type="button" class="help-btn" aria-describedby="tip-kfb" aria-label="Hilfe: Kinderfreibetrag-Zähler">?</button>
+                  <span id="tip-kfb" class="help-tip" role="tooltip">Getrennt lebende Eltern: Der Zähler steht auf dem Steuerbescheid. Pro Kind normalerweise 0,5; 1,0, wenn der andere Elternteil seinen Anteil auf Sie übertragen hat; 0, wenn Sie Ihren Anteil übertragen haben (§ 32 Abs. 6 EStG). Wirkt nur auf Solidaritätszuschlag und Kirchensteuer, nicht auf die Pflegeversicherung.</span>
+                </span>
+              </label>
+              <input id="kfb-zaehler" type="number" step="0.5" min="0" max="0" value="0" inputmode="decimal" autocomplete="off" />
+            </div>
           </fieldset>
 
           <fieldset>

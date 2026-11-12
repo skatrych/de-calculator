@@ -38,6 +38,9 @@ const spouseWrap = document.getElementById('spouse-wrap') as HTMLElement;
 const landWrap = document.getElementById('land-wrap') as HTMLElement;
 const elternWrap = document.getElementById('eltern-wrap') as HTMLElement;
 const kfbWrap = document.getElementById('kfb-wrap') as HTMLElement;
+const kfbInput = document.getElementById('kfb-zaehler') as HTMLInputElement;
+/** Once the user edits the Zähler, stop auto-following the default. */
+let kfbZaehlerTouched = false;
 const zusatzWrap = document.getElementById('zusatz-wrap') as HTMLElement;
 const zusatzInput = document.getElementById('zusatz') as HTMLInputElement;
 const zusatzHint = document.getElementById('zusatz-hint') as HTMLElement;
@@ -212,6 +215,34 @@ function rebuildOverrideFields(): void {
   }
 }
 
+
+function defaultKfbZaehler(nChildren: number, married: boolean): number {
+  return nChildren * (married ? 1 : 0.5);
+}
+
+function formatKfbZaehler(n: number): string {
+  // 0.5 stays "0.5"; whole numbers as "0", "1", "2".
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function syncKfbZaehler(nChildren: number, married: boolean): void {
+  const max = nChildren; // × 1.0: at most the full KFB per child
+  kfbInput.min = '0';
+  kfbInput.max = String(max);
+  kfbInput.step = '0.5';
+  if (!kfbZaehlerTouched) {
+    kfbInput.value = formatKfbZaehler(defaultKfbZaehler(nChildren, married));
+    return;
+  }
+  const raw = kfbInput.value.trim().replace(',', '.');
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 0) {
+    kfbInput.value = '0';
+  } else if (v > max) {
+    kfbInput.value = formatKfbZaehler(max);
+  }
+}
+
 function updateVisibility(): void {
   const isAverage = mode() === 'average';
   hide(yearsAverage, !isAverage);
@@ -224,7 +255,8 @@ function updateVisibility(): void {
   const nChildren = Number(children.value);
   const married = (document.getElementById('married') as HTMLInputElement).checked;
   hide(elternWrap, nChildren !== 0);
-  hide(kfbWrap, nChildren === 0 || married);
+  hide(kfbWrap, nChildren === 0);
+  syncKfbZaehler(nChildren, married);
   const kv = (form.querySelector('input[name="kv"]:checked') as HTMLInputElement).value;
   hide(zusatzWrap, kv === 'pkv');
   hide(pkvWrap, kv !== 'pkv');
@@ -277,6 +309,30 @@ function parseOptionalEuro(raw: string, label: string, defaultValue = '0'): { ok
   return { ok: true, value: parsed.value.toString() };
 }
 
+
+function parseKfbZaehlerInput(
+  raw: string,
+  nChildren: number,
+): { ok: true; value: number } | { ok: false; message: string } {
+  const max = nChildren;
+  const text = raw.trim().replace(',', '.');
+  if (text === '') {
+    return { ok: true, value: defaultKfbZaehler(nChildren, (document.getElementById('married') as HTMLInputElement).checked) };
+  }
+  const v = Number(text);
+  const isStep = Number.isFinite(v) && Math.abs(v * 2 - Math.round(v * 2)) < 1e-9;
+  if (!Number.isFinite(v) || !isStep || v < 0 || v > max) {
+    return {
+      ok: false,
+      message:
+        max === 0
+          ? 'Der Kinderfreibetrag-Zähler muss 0 sein, wenn keine Kinder unter 25 angegeben sind.'
+          : `Der Kinderfreibetrag-Zähler muss ein Vielfaches von 0,5 zwischen 0 und ${String(max).replace('.', ',')} sein.`,
+    };
+  }
+  return { ok: true, value: v };
+}
+
 function sharedInputBase(): Omit<YearInput, 'year' | 'gewinn'> | { errors: string[] } {
   const errors: string[] = [];
   const married = (document.getElementById('married') as HTMLInputElement).checked;
@@ -324,6 +380,10 @@ function sharedInputBase(): Omit<YearInput, 'year' | 'gewinn'> | { errors: strin
     else voluntaryRvMonthly = v.value;
   }
 
+  const nChildren = Number(children.value);
+  const kfbParsed = parseKfbZaehlerInput(kfbInput.value, nChildren);
+  if (!kfbParsed.ok) errors.push(kfbParsed.message);
+
   if (errors.length) return { errors };
 
   return {
@@ -337,7 +397,7 @@ function sharedInputBase(): Omit<YearInput, 'year' | 'gewinn'> | { errors: strin
     childrenUnder25: Number(children.value),
     elterneigenschaft: (document.getElementById('eltern') as HTMLInputElement).checked,
     age23Plus: (document.getElementById('age23') as HTMLInputElement).checked,
-    fullKinderfreibetrag: married || (document.getElementById('kfb-full') as HTMLInputElement).checked,
+    kfbZaehler: kfbParsed.ok ? kfbParsed.value : defaultKfbZaehler(nChildren, married),
     kvType: kv,
     zusatzbeitragPercent,
     pkvPremiumMonthly,
@@ -755,7 +815,10 @@ function init(): void {
     event.preventDefault();
     recalc();
   });
-  form.addEventListener('input', () => recalc());
+  form.addEventListener('input', (event) => {
+    if (event.target === kfbInput) kfbZaehlerTouched = true;
+    recalc();
+  });
   form.addEventListener('change', (event) => {
     const t = event.target;
     if (

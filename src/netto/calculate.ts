@@ -73,10 +73,8 @@ function runPipeline(
   // festzusetzende ESt is computed without Kinderfreibeträge. KiSt and Soli
   // share the same fictitious ESt that deducts them (§ 51a Abs. 2 EStG,
   // SolzG § 3 Abs. 2). The Sonderausgaben deduction still uses the cash KiSt.
-  const childrenKfb = v.childrenUnder25;
-  const kfbPer =
-    v.married || v.fullKinderfreibetrag ? params.kfbBothParents : params.kfbOneParent;
-  const kfb = childrenKfb > 0 ? kfbPer.times(childrenKfb) : d(0);
+  // KFB = Zähler × both-parents amount. PV still uses childrenUnder25.
+  const kfb = v.kfbZaehler > 0 ? params.kfbBothParents.times(v.kfbZaehler) : d(0);
 
   const assess = (zveUserRaw: Decimal) => {
     let zveUser = zveUserRaw;
@@ -278,7 +276,6 @@ export function defaultInput(overrides: Partial<YearInput> & { gewinn: EuroInput
     childrenUnder25: 0,
     elterneigenschaft: false,
     age23Plus: true,
-    fullKinderfreibetrag: false,
     kvType: 'gkv_ermaessigt',
     rvMode: 'keine',
     avMode: 'nein',
