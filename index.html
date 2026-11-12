@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; worker-src 'none'; manifest-src 'self'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      name="description"
+      content="Netto-Einkommen für Selbständige in Deutschland. Keine Steuerberatung. Alle Berechnungen laufen vollständig in Ihrem Browser."
+    />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/ui/style.css" />
+    <title>Netto-Einkommen für Selbständige</title>
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <p class="kicker">de-calculator</p>
+        <h1>Netto-Einkommen für Selbständige</h1>
+        <p class="lead">
+          Schätzung nach den gesetzlichen Regeln der Jahre 2023–2026.
+          Standard: Dreijahresdurchschnitt der letzten abgeschlossenen Jahre.
+        </p>
+
+      <aside class="disclaimer-banner" role="note">
+        <p>
+          <strong>Keine Steuerberatung.</strong>
+          Diese Berechnung ist eine vereinfachte Schätzung nach den gesetzlichen Regeln
+          und ersetzt keine Steuer- oder Sozialversicherungsberatung. Für die tatsächliche
+          Festsetzung sind das Finanzamt und die jeweiligen Sozialversicherungsträger zuständig.
+          Die Beiträge zur gesetzlichen Kranken- und Pflegeversicherung werden endgültig nach
+          dem Einkommensteuerbescheid bemessen; andere Einnahmen (Kapital, Vermietung) können
+          die Bemessungsgrundlage erhöhen und sind in Version 1 nicht modelliert.
+        </p>
+      </aside>
+
+      <p class="privacy-banner" role="note">
+        <strong>Datenschutz:</strong>
+        Diese Anwendung läuft vollständig in Ihrem Browser. Es gibt keinen Server, der Ihre Angaben entgegennimmt. Es werden keine Cookies gesetzt und keine Daten im Browser gespeichert (kein localStorage, sessionStorage oder IndexedDB). Ihre Eingaben stehen nicht in der Adresszeile und werden nicht an Dritte übermittelt. Es gibt keine Analyse- oder Trackingdienste. Nach dem Schließen oder Neuladen der Seite sind die Eingaben gelöscht.
+      </p>
+      </header>
+
+      <main>
+      <div id="sticky-netto" class="sticky-netto is-hidden" aria-live="polite">
+        <span class="sticky-netto-label" id="sticky-netto-label">Dreijahresdurchschnitt</span>
+        <strong id="sticky-netto-value">—</strong>
+        <span class="sticky-netto-sub" id="sticky-netto-sub"></span>
+      </div>
+
+      <div class="layout">
+        <form id="calc-form" class="panel form" autocomplete="off">
+          <fieldset class="segmented-field">
+            <legend>Berechnungsart</legend>
+            <div class="segmented" role="radiogroup" aria-label="Berechnungsart">
+              <input type="radio" id="mode-avg" name="mode" value="average" checked autocomplete="off" />
+              <label for="mode-avg">Dreijahresdurchschnitt</label>
+              <input type="radio" id="mode-single" name="mode" value="single" autocomplete="off" />
+              <label for="mode-single">Einzeljahr</label>
+            </div>
+          </fieldset>
+
+          <div id="years-average" class="field">
+            <label for="year-triple">Jahre</label>
+            <select id="year-triple" autocomplete="off">
+              <option value="2023,2024,2025" selected>2023–2025 (Standard)</option>
+              <option value="2024,2025,2026">2024–2026</option>
+            </select>
+            <p class="hint">Standard: letzte abgeschlossene Kalenderjahre.</p>
+          </div>
+
+          <div id="year-single-wrap" class="field is-hidden">
+            <label for="year-single">Jahr</label>
+            <div id="year-single-options" class="segmented year-pills" role="radiogroup" aria-label="Jahr"></div>
+          </div>
+
+          <div id="gewinn-fields" class="gewinn-block">
+            <!-- filled by JS: one field per year -->
+          </div>
+          <p class="hint">Jahresgewinn nach Betriebsausgaben, vor Steuern und Sozialabgaben, ohne Umsatzsteuer.</p>
+
+          <div id="rechtskreis-wrap" class="field">
+            <label for="rechtskreis">
+              Rechtskreis West / Ost
+              <span class="help">
+                <button type="button" class="help-btn" aria-describedby="tip-rk" aria-label="Hilfe: Rechtskreis">?</button>
+                <span id="tip-rk" class="help-tip" role="tooltip">Nur 2023 und 2024: Bezugsgröße und Renten-Beitragsbemessungsgrenze unterschieden noch West und Ost. Ab 2025 bundesweit einheitlich. Für Berlin wählen Sie selbst — es wird nicht automatisch zugeordnet.</span>
+              </span>
+            </label>
+            <div class="segmented" role="radiogroup" aria-label="Rechtskreis">
+              <input type="radio" id="rk-west" name="rechtskreis" value="west" checked autocomplete="off" />
+              <label for="rk-west">West</label>
+              <input type="radio" id="rk-ost" name="rechtskreis" value="ost" autocomplete="off" />
+              <label for="rk-ost">Ost</label>
+            </div>
+          </div>
+
+          <fieldset>
+            <legend>Tätigkeit</legend>
+            <div class="segmented" role="radiogroup" aria-label="Tätigkeitsart">
+              <input type="radio" id="act-frei" name="activity" value="freiberufler" checked autocomplete="off" />
+              <label for="act-frei">Freiberufler</label>
+              <input type="radio" id="act-gew" name="activity" value="gewerbe" autocomplete="off" />
+              <label for="act-gew">Gewerbe</label>
+            </div>
+            <div id="hebesatz-wrap" class="field is-hidden">
+              <label for="hebesatz">
+                Gewerbesteuer-Hebesatz
+                <span class="help">
+                  <button type="button" class="help-btn" aria-describedby="tip-heb" aria-label="Hilfe: Hebesatz">?</button>
+                  <span id="tip-heb" class="help-tip" role="tooltip">Hebesatz Ihrer Gemeinde in Prozent. Bei 400 % kann die Steuerermäßigung nach § 35 EStG die Gewerbesteuer in der Regel vollständig ausgleichen. Den Satz finden Sie auf der Website Ihrer Stadt.</span>
+                </span>
+              </label>
+              <div class="input-suffix">
+                <input id="hebesatz" type="text" inputmode="decimal" value="400" autocomplete="off" />
+                <span>%</span>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Persönliche Situation</legend>
+            <label class="check">
+              <input id="married" type="checkbox" autocomplete="off" />
+              Verheiratet, Zusammenveranlagung
+            </label>
+            <div id="spouse-wrap" class="field is-hidden">
+              <label for="spouse-zve">
+                zvE des Ehepartners
+                <span class="help">
+                  <button type="button" class="help-btn" aria-describedby="tip-zve" aria-label="Hilfe: zvE">?</button>
+                  <span id="tip-zve" class="help-tip" role="tooltip">Zu versteuerndes Einkommen des Ehepartners, bereits nach dessen eigenen Abzügen, bevor beide zusammengerechnet werden. Bei 0 € gilt das volle Splitting.</span>
+                </span>
+              </label>
+              <div class="input-suffix">
+                <input id="spouse-zve" type="text" inputmode="decimal" value="0" autocomplete="off" />
+                <span>€</span>
+              </div>
+            </div>
+            <label class="check">
+              <input id="church" type="checkbox" autocomplete="off" />
+              Kirchensteuer
+            </label>
+            <div id="land-wrap" class="field is-hidden">
+              <label for="bundesland">Bundesland</label>
+              <select id="bundesland" autocomplete="off"></select>
+              <p class="hint">8 % in Bayern und Baden-Württemberg, 9 % in den übrigen Ländern.</p>
+            </div>
+            <div class="field">
+              <label for="children">Kinder unter 25 Jahren</label>
+              <select id="children" autocomplete="off"></select>
+            </div>
+            <label id="eltern-wrap" class="check">
+              <input id="eltern" type="checkbox" autocomplete="off" />
+              <span class="check-text">Elterneigenschaft (auch wenn alle Kinder 25 oder älter)&nbsp;<span class="help">
+                <button type="button" class="help-btn" aria-describedby="tip-el" aria-label="Hilfe: Elterneigenschaft">?</button>
+                <span id="tip-el" class="help-tip" role="tooltip">Wer Elternteil ist, zahlt nicht den Kinderlosenzuschlag in der Pflegeversicherung (3,6 % statt 4,2 % in 2025/2026), auch wenn die Kinder schon 25 oder älter sind. Der Abschlag für 2–5 Kinder gilt nur für Kinder unter 25.</span>
+              </span>
+              </span>
+            </label>
+            <label id="age-wrap" class="check">
+              <input id="age23" type="checkbox" checked autocomplete="off" />
+              Mindestens 23 Jahre alt
+            </label>
+            <label id="kfb-wrap" class="check is-hidden">
+              <input id="kfb-full" type="checkbox" autocomplete="off" />
+              Vollen Kinderfreibetrag übertragen
+              <span class="help">
+                <button type="button" class="help-btn" aria-describedby="tip-kfb" aria-label="Hilfe: Kinderfreibetrag">?</button>
+                <span id="tip-kfb" class="help-tip" role="tooltip">Nur für Solidaritätszuschlag und Kirchensteuer. Als Alleinstehende gilt standardmäßig der Anteil eines Elternteils. Haken setzen, wenn der andere Elternteil seinen Anteil übertragen hat. Bei Zusammenveranlagung gelten immer beide Anteile.</span>
+              </span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Kranken- und Pflegeversicherung</legend>
+            <div class="stack-radios" role="radiogroup" aria-label="Krankenversicherung">
+              <label class="check">
+                <input type="radio" name="kv" id="kv-erm" value="gkv_ermaessigt" checked autocomplete="off" />
+                GKV ermäßigt (ohne Krankengeld)
+              </label>
+              <label class="check">
+                <input type="radio" name="kv" id="kv-allg" value="gkv_allgemein" autocomplete="off" />
+                <span class="check-text">GKV allgemein (mit Krankengeld ab Tag 43)&nbsp;<span class="help">
+                  <button type="button" class="help-btn" aria-describedby="tip-kg" aria-label="Hilfe: Krankengeld">?</button>
+                  <span id="tip-kg" class="help-tip" role="tooltip">Der allgemeine Satz (14,6 % plus Zusatzbeitrag) gilt mit Anspruch auf Krankengeld. Steuerlich wird der Beitrag dann um 4 % gekürzt (mal 0,96), die Pflegeversicherung nicht.</span>
+                </span>
+                </span>
+              </label>
+              <label class="check">
+                <input type="radio" name="kv" id="kv-pkv" value="pkv" autocomplete="off" />
+                Private Krankenversicherung (PKV)
+              </label>
+            </div>
+            <div id="zusatz-wrap" class="field">
+              <label for="zusatz">
+                Zusatzbeitragssatz
+                <span class="help">
+                  <button type="button" class="help-btn" aria-describedby="tip-zb" aria-label="Hilfe: Zusatzbeitrag">?</button>
+                  <span id="tip-zb" class="help-tip" role="tooltip">Bitte den kassenindividuellen Satz Ihrer Krankenkasse eintragen. Der vorbelegte Wert ist der amtliche Durchschnitt des Bundesministeriums (der tatsächliche Satz Ihrer Kasse kann höher sein). Im Dreijahresdurchschnitt gilt ohne eigene Angabe für jedes Jahr der jeweilige amtliche Durchschnitt.</span>
+                </span>
+              </label>
+              <div class="input-suffix">
+                <input id="zusatz" type="text" inputmode="decimal" placeholder="je Jahr amtlich" autocomplete="off" />
+                <span>%</span>
+              </div>
+              <p class="hint" id="zusatz-hint"></p>
+            </div>
+            <div id="pkv-wrap" class="is-hidden">
+              <div class="field">
+                <label for="pkv-premium">PKV-Beitrag monatlich</label>
+                <div class="input-suffix">
+                  <input id="pkv-premium" type="text" inputmode="decimal" autocomplete="off" />
+                  <span>€</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="pkv-basis">
+                  davon Basis-KV (steuerlich abziehbar), monatlich
+                  <span class="help">
+                    <button type="button" class="help-btn" aria-describedby="tip-basis" aria-label="Hilfe: Basis-KV">?</button>
+                    <span id="tip-basis" class="help-tip" role="tooltip">Der von Ihrer Versicherung bescheinigte steuerlich abziehbare Anteil, höchstens so hoch wie der volle Beitrag.</span>
+                  </span>
+                </label>
+                <div class="input-suffix">
+                  <input id="pkv-basis" type="text" inputmode="decimal" autocomplete="off" />
+                  <span>€</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="ppv">Private Pflegepflichtversicherung monatlich</label>
+                <div class="input-suffix">
+                  <input id="ppv" type="text" inputmode="decimal" autocomplete="off" />
+                  <span>€</span>
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+          <details class="more">
+            <summary>Rentenversicherung, Arbeitslosenversicherung und weitere Angaben</summary>
+            <div class="field">
+              <label for="rv">
+                Rentenversicherung
+                <span class="help">
+                  <button type="button" class="help-btn" aria-describedby="tip-rv" aria-label="Hilfe: Rentenversicherung">?</button>
+                  <span id="tip-rv" class="help-tip" role="tooltip">Für die meisten Selbständigen freiwillig. Pflicht gilt für bestimmte Berufe (z. B. Lehrer, Erzieher, Hebammen, Handwerker). Der Rechner entscheidet das nicht — Sie wählen selbst. Regelbeitrag: Beitrag auf Basis der Bezugsgröße. Pflicht: 18,6 % vom Gewinn, begrenzt auf Mindest- und Höchstbeitrag.</span>
+                </span>
+              </label>
+              <select id="rv" autocomplete="off">
+                <option value="keine" selected>keine</option>
+                <option value="pflicht">Pflicht (einkommensbezogen)</option>
+                <option value="regelbeitrag">Regelbeitrag</option>
+                <option value="freiwillig">Freiwillig</option>
+              </select>
+            </div>
+            <div id="rv-vol-wrap" class="field is-hidden">
+              <label for="rv-vol">Freiwilliger RV-Beitrag monatlich</label>
+              <div class="input-suffix">
+                <input id="rv-vol" type="text" inputmode="decimal" autocomplete="off" />
+                <span>€</span>
+              </div>
+              <p class="hint" id="rv-vol-hint"></p>
+            </div>
+            <div class="field">
+              <label for="av">
+                Arbeitslosenversicherung auf Antrag
+                <span class="help">
+                  <button type="button" class="help-btn" aria-describedby="tip-av" aria-label="Hilfe: Arbeitslosenversicherung">?</button>
+                  <span id="tip-av" class="help-tip" role="tooltip">Freiwillige Versicherung auf Antrag. In der Anlaufphase (Jahr des Beginns und das folgende Kalenderjahr) gilt die halbe Bezugsgröße. Der Beitrag ist fast nie als Sonderausgabe abziehbar, fließt aber als Zahlung in das Netto ein.</span>
+                </span>
+              </label>
+              <select id="av" autocomplete="off">
+                <option value="nein" selected>nein</option>
+                <option value="voll">ja (voller Beitrag)</option>
+                <option value="anlaufphase">ja (Anlaufphase)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="other-sa">Weitere Sonderausgaben (ohne Vorsorge und Kirchensteuer)</label>
+              <div class="input-suffix">
+                <input id="other-sa" type="text" inputmode="decimal" value="0" autocomplete="off" />
+                <span>€</span>
+              </div>
+            </div>
+          </details>
+
+          <details class="more" id="override-box">
+            <summary>Steuerbescheid: festzusetzende ESt, Soli, KiSt (optional, je Jahr)</summary>
+            <p class="hint">
+              Wenn Sie die festgesetzten Beträge aus dem Steuerbescheid eintragen, ersetzen diese die berechneten Steuern für das Netto. Sozialabgaben und Gewerbesteuer bleiben berechnet. Das entspricht eher den festgesetzten Steuern des Jahres, nicht den tatsächlich in dem Jahr gezahlten Voraus- und Nachzahlungen.
+            </p>
+            <div id="override-fields"></div>
+          </details>
+
+          <p id="form-errors" class="errors" role="alert" hidden></p>
+        </form>
+
+        <section id="results" class="panel results" aria-live="polite">
+          <p class="results-placeholder" id="results-placeholder">
+            Geben Sie Ihren Jahresgewinn ein — das Ergebnis erscheint sofort.
+            Im Dreijahresdurchschnitt reicht je ein Betrag für 2023, 2024 und 2025.
+          </p>
+          <div id="results-body" class="is-hidden"></div>
+        </section>
+      </div>
+        <noscript>
+          <p>Dieser Rechner benötigt JavaScript. Es wird ausschließlich in Ihrem Browser ausgeführt, ohne Verbindung zu einem Server.</p>
+        </noscript>
+      </main>
+
+      <footer class="footer">
+        <h2>Datenschutz</h2>
+        <p>
+          Diese Anwendung läuft vollständig in Ihrem Browser. Es gibt keinen Server, der Ihre Angaben entgegennimmt. Es werden keine Cookies gesetzt und keine Daten im Browser gespeichert (kein localStorage, sessionStorage oder IndexedDB). Ihre Eingaben stehen nicht in der Adresszeile und werden nicht an Dritte übermittelt. Es gibt keine Analyse- oder Trackingdienste. Nach dem Schließen oder Neuladen der Seite sind die Eingaben gelöscht.
+        </p>
+        <h2>Keine Steuerberatung</h2>
+        <p>
+          Diese Berechnung ist eine vereinfachte Schätzung nach den gesetzlichen Regeln
+          und ersetzt keine Steuer- oder Sozialversicherungsberatung. Für die tatsächliche
+          Festsetzung sind das Finanzamt und die jeweiligen Sozialversicherungsträger zuständig.
+          Die Beiträge zur gesetzlichen Kranken- und Pflegeversicherung werden endgültig nach
+          dem Einkommensteuerbescheid bemessen; andere Einnahmen (Kapital, Vermietung) können
+          die Bemessungsgrundlage erhöhen und sind in Version 1 nicht modelliert.
+        </p>
+        <details>
+          <summary>Bekannte Vereinfachungen</summary>
+          <ol class="limits">
+            <li>Andere Einkünfte (Kapital, Vermietung) stehen nicht in der KV/PV-Bemessung; der Steuerbescheid würde sie einbeziehen.</li>
+            <li>Kein Kindergeld und keine Günstigerprüfung gegen den Kinderfreibetrag für die tarifliche Einkommensteuer. Solidaritätszuschlag und Kirchensteuer nutzen den Kinderfreibetrag (§ 51a Abs. 2 EStG, SolzG § 3 Abs. 2). Bei höherem Einkommen mit Kindern kann die Einkommensteuer etwas zu hoch ausgewiesen sein.</li>
+            <li>Das zvE des Ehepartners ist eine vereinfachte Zusammenveranlagung.</li>
+            <li>Keine Hinzurechnungen bei der Gewerbesteuer; Gewerbeertrag = Gewinn.</li>
+            <li>Die Rundung der Kirchensteuer kann je nach Land um etwa 1 € abweichen.</li>
+            <li>Die Künstlersozialkasse (KSK) ist nicht enthalten.</li>
+            <li>Eine mögliche Pflicht-RV-Befreiung unter der Geringfügigkeitsgrenze wird nicht abgebildet; es gilt der Mindestbeitrag.</li>
+            <li>Der vorbelegte Zusatzbeitrag ist der amtliche BMG-Durchschnitt und kann unter Ihrem kassenindividuellen Satz liegen.</li>
+            <li>Der Dreijahresdurchschnitt ist <strong>nicht</strong> die gesetzliche Bemessung für Elterngeld (§ 2b Abs. 2 BEEG: letzter abgeschlossener Veranlagungszeitraum) und nicht für Bürgergeld (§ 41a SGB II: Prognose für den Bewilligungszeitraum, in der Regel sechs Monate).</li>
+            <li>Für 2023 ist die Pflegeversicherung ein gewichteter Jahresbeitrag aus zwei Halbjahren (je sechs Monate); ein unterjähriger Versicherungsbeginn wird nicht abgebildet.</li>
+            <li>Ein Steuerbescheid-Wert ersetzt die festgesetzte Steuer, nicht Vorauszahlungen und Nachzahlungen im Zahlungsjahr.</li>
+          </ol>
+        </details>
+        <p class="footer-meta">
+          Spezifikation:
+          <a href="https://github.com/skatrych/de-calculator/blob/main/docs/SPEC-netto-selbststaendige.md">SPEC-netto-selbststaendige.md</a>
+        </p>
+      </footer>
+    </div>
+    <script type="module" src="./src/ui/main.ts"></script>
+  </body>
+</html>
