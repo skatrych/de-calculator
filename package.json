@@ -1,0 +1,29 @@
+{
+  "name": "de-calculator",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Rechner für deutsche Finanzfragen (keine Steuerberatung).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview",
+    "check:privacy": "node scripts/check-privacy.mjs",
+    "cli": "node --experimental-strip-types src/cli/cli.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "decimal.js": "^10.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2",
+    "vitest": "^4.0.8"
+  }
+}
