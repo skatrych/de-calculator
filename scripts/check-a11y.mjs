@@ -93,6 +93,8 @@ async function fillAverage(page) {
   await page.fill('#gewinn-2023', '80.000');
   await page.fill('#gewinn-2024', '80.000');
   await page.fill('#gewinn-2025', '80.000');
+  await page.selectOption('#children', '2');
+  await page.waitForSelector('#kfb-wrap:not(.is-hidden)');
   await page.waitForSelector('.headline .amount');
   await openAllDetails(page);
 }
@@ -101,6 +103,8 @@ async function fillSingle(page) {
   await page.locator('label[for="mode-single"]').click();
   await page.waitForSelector('#gewinn-2026');
   await page.fill('#gewinn-2026', '80.000');
+  await page.selectOption('#children', '2');
+  await page.waitForSelector('#kfb-wrap:not(.is-hidden)');
   await page.waitForSelector('.headline .amount');
   await openAllDetails(page);
 }

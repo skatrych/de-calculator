@@ -51,10 +51,13 @@ export interface YearInput {
   elterneigenschaft: boolean;
   age23Plus: boolean;
   /**
-   * For Soli (and optional KiSt) base only. Single default is one parent's share;
-   * set true to use both. Married: always both shares, this flag is ignored.
+   * Kinderfreibetrag-Zähler laut Steuerbescheid (SPEC Section 6.9).
+   * Steps of 0.5, from 0 through childrenUnder25 × 1.0 (at most the full
+   * both-parents KFB per child). If omitted, defaults to
+   * childrenUnder25 × (married ? 1.0 : 0.5). Used only for the fictitious
+   * ESt that Soli and KiSt share; PV still uses childrenUnder25.
    */
-  fullKinderfreibetrag: boolean;
+  kfbZaehler?: number;
   kvType: KvType;
   /** Zusatzbeitrag as a percent, e.g. 2.9 for 2.9 %. Default: official BMG average. */
   zusatzbeitragPercent?: EuroInput;

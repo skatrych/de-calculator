@@ -158,7 +158,7 @@ describe('G5 — Gewerbe, Hebesatz 500 %, residual GewSt (2026)', () => {
 });
 
 describe('G6 — Married Splitting, spouse zvE 0 (2026)', () => {
-  const r = calc({ gewinn: 80000, married: true, spouseZve: 0, fullKinderfreibetrag: true });
+  const r = calc({ gewinn: 80000, married: true, spouseZve: 0 });
   it('intermediates and Netto', () => {
     expectEuro(r.kvCash, '11787.75', 'KV');
     expectEuro(r.pvCash, '2929.50', 'PV');
@@ -176,7 +176,7 @@ describe('G6 — Married Splitting, spouse zvE 0 (2026)', () => {
 });
 
 describe('G7 — Married Splitting, spouse zvE 40_000 (2026)', () => {
-  const r = calc({ gewinn: 80000, married: true, spouseZve: 40000, fullKinderfreibetrag: true });
+  const r = calc({ gewinn: 80000, married: true, spouseZve: 40000 });
   it('intermediates and Netto', () => {
     expectEuro(r.zve, '65210.00', 'user zvE');
     expectEuro(r.zveJoint, '105210.00', 'joint');
@@ -479,6 +479,116 @@ describe('G19 — KiSt 9 % with Kinderfreibetrag (2026)', () => {
   });
 });
 
+
+/**
+ * G20 — Separated (unmarried) father, 2 children under 25, KiSt 9 % (NRW),
+ * 2026, Gewinn 120,000. Same social facts as G16/G19 (PV still follows
+ * childrenUnder25 = 2, rate 3.35 %): KV 11,787.75; PV 2,336.63; Vorsorge
+ * 14,124.38. Two Zähler sub-cases. Kindergeld and the Günstigerprüfung
+ * Kindergeld vs. Kinderfreibetrag for tarifliche ESt are out of scope
+ * (SPEC Section 2 and known limitation 2): Kinderfreibeträge affect only
+ * the fictitious ESt for Soli and KiSt; Kindergeld is not added to Netto.
+ *
+ * G20a — Zähler 0 (the father's half transferred away). No KFB, so
+ * fictitious ESt = real ESt. All zvE in zone 4 of 2026:
+ *   tariff(x) = floor(0.42 × x − 11,135.63).
+ * Iteration (sa = max(36, KiSt)):
+ * 1. sa = 36. zvE = floor(120,000 − 14,124.38 − 36) = 105,839;
+ *    ESt raw = 0.42 × 105,839 − 11,135.63 = 33,316.75 → 33,316.
+ *    fest_soli = 33,316 (no KFB). KiSt = commercial(0.09 × 33,316) = 2,998.44.
+ * 2. sa = 2,998.44. zvE = floor(120,000 − 14,124.38 − 2,998.44) = 102,877;
+ *    ESt raw = 0.42 × 102,877 − 11,135.63 = 32,072.71 → 32,072.
+ *    KiSt = commercial(0.09 × 32,072) = 2,886.48.
+ * 3. sa = 2,886.48. zvE = floor(120,000 − 14,124.38 − 2,886.48) = 102,989;
+ *    ESt raw = 0.42 × 102,989 − 11,135.63 = 32,119.75 → 32,119.
+ *    KiSt = commercial(0.09 × 32,119) = 2,890.71.
+ * 4. sa = 2,890.71. zvE = floor(120,000 − 14,124.38 − 2,890.71) = 102,984;
+ *    ESt raw = 0.42 × 102,984 − 11,135.63 = 32,117.65 → 32,117.
+ *    KiSt = commercial(0.09 × 32,117) = 2,890.53.
+ * 5. sa = 2,890.53. zvE = floor(120,000 − 14,124.38 − 2,890.53) = 102,985;
+ *    ESt raw = 0.42 × 102,985 − 11,135.63 = 32,118.07 → 32,118.
+ *    KiSt = commercial(0.09 × 32,118) = 2,890.62.
+ * 6. sa = 2,890.62. zvE = floor(120,000 − 14,124.38 − 2,890.62) = 102,985;
+ *    ESt 32,118, fest_soli 32,118, KiSt 2,890.62. Converged.
+ * Soli on 32,118 (Freigrenze 20,350, Milderung):
+ *    0.055 × 32,118 = 1,766.49; 0.119 × (32,118 − 20,350) = 0.119 × 11,768
+ *    = 1,400.392 → 1,400.39.
+ * Burden = 11,787.75 + 2,336.63 + 32,118 + 1,400.39 + 2,890.62 = 50,533.39
+ * Netto  = 120,000 − 50,533.39 = 69,466.61
+ * Monthly = commercial(69,466.61 / 12) = 5,788.88
+ * Effective = commercial(50,533.39 / 120,000 × 100) = 42.11 %
+ *
+ * G20b — Zähler 1.0 (default for unmarried + 2 children: 2 × 0.5).
+ * KFB = 1.0 × 9,756 = 9,756. Identical to G19 (same inputs and the
+ * G19 default). Real ESt 32,267; fest_soli 28,169; KiSt 2,535.21;
+ * Soli 930.46; Burden 49,857.05; Netto 70,142.95.
+ *
+ * Soli differs by 469.93 and KiSt by 355.41 between the two Zähler
+ * values. PV is the same in both (2,336.63), confirming PV stays on
+ * childrenUnder25.
+ */
+describe('G20 — Separated father, 2 children, KiSt 9 %, Zähler 0 vs 1.0 (2026)', () => {
+  const common = {
+    gewinn: 120000,
+    childrenUnder25: 2,
+    churchTax: true,
+    bundesland: 'Nordrhein-Westfalen' as const,
+  };
+
+  it('G20a — Zähler 0: fictitious ESt equals real ESt', () => {
+    const r = calc({ ...common, kfbZaehler: 0 });
+    expectEuro(r.kvCash, '11787.75', 'KV');
+    expectEuro(r.pvCash, '2336.63', 'PV (still 2 children)');
+    expect(r.pvRate.percent).toBe('3.35');
+    expectEuro(r.vorsorge, '14124.38', 'Vorsorge');
+    expectEuro(r.zve, '102985.00', 'zvE');
+    expectEuro(r.festzusetzendeEstUser, '32118.00', 'real ESt');
+    expectEuro(r.festSoli, '32118.00', 'fictitious ESt = real (no KFB)');
+    expect(r.kistRate.percent).toBe('9.00');
+    expectEuro(r.kistUser, '2890.62', 'KiSt = 0.09 × 32,118');
+    expectEuro(r.soliUser, '1400.39', 'Soli on real ESt');
+    expectEuro(r.totalBurden, '50533.39', 'Burden');
+    expectEuro(r.nettoAnnual, '69466.61', 'Netto');
+    expectEuro(r.nettoMonthly, '5788.88', 'monthly');
+    expect(r.effectiveBurdenPercent?.percent).toBe('42.11');
+  });
+
+  it('G20b — Zähler 1.0: matches G19 (default unmarried, 2 children)', () => {
+    const r = calc({ ...common, kfbZaehler: 1.0 });
+    const g19 = calc({
+      gewinn: 120000,
+      childrenUnder25: 2,
+      churchTax: true,
+      bundesland: 'Nordrhein-Westfalen',
+    });
+    expectEuro(r.pvCash, '2336.63', 'PV unchanged vs G20a');
+    expectEuro(r.festzusetzendeEstUser, '32267.00', 'real ESt');
+    expectEuro(r.festSoli, '28169.00', 'fictitious ESt');
+    expectEuro(r.kistUser, '2535.21', 'KiSt');
+    expectEuro(r.soliUser, '930.46', 'Soli');
+    expectEuro(r.totalBurden, '49857.05', 'Burden');
+    expectEuro(r.nettoAnnual, '70142.95', 'Netto');
+    expectEuro(r.nettoMonthly, '5845.25', 'monthly');
+    expect(r.effectiveBurdenPercent?.percent).toBe('41.55');
+    // Explicit 1.0 equals the omitted (default) Zähler used by G19.
+    expect(r.nettoAnnual.euros).toBe(g19.nettoAnnual.euros);
+    expect(r.soliUser.euros).toBe(g19.soliUser.euros);
+    expect(r.kistUser.euros).toBe(g19.kistUser.euros);
+    expect(r.festSoli.euros).toBe(g19.festSoli.euros);
+  });
+
+  it('Soli and KiSt differ between Zähler 0 and 1.0; PV does not', () => {
+    const a = calc({ ...common, kfbZaehler: 0 });
+    const b = calc({ ...common, kfbZaehler: 1.0 });
+    expect(a.soliUser.euros).not.toBe(b.soliUser.euros);
+    expect(a.kistUser.euros).not.toBe(b.kistUser.euros);
+    expect(a.pvCash.euros).toBe(b.pvCash.euros);
+    expect(a.pvCash.cents - b.pvCash.cents).toBe(0);
+    expect(a.soliUser.cents - b.soliUser.cents).toBe(46993);
+    expect(a.kistUser.cents - b.kistUser.cents).toBe(35541);
+  });
+});
+
 describe('consistency (SPEC 11.3)', () => {
   it('G4 Netto === G14 Netto', () => {
     const g4 = calc({ gewinn: 80000, activity: 'gewerbe', hebesatz: 400 });
@@ -550,6 +660,39 @@ describe('validation (SPEC 11.3)', () => {
       expect(o.errors.some((e) => e.field === 'pkvBasisMonthly')).toBe(true);
       expect(o.errors.some((e) => e.field === 'privatePvMonthly')).toBe(true);
     }
+  });
+
+  it('kfbZaehler defaults to children × 0.5 when unmarried, × 1.0 when married', () => {
+    const unmarried = calculateNetto(defaultInput({ gewinn: 120000, childrenUnder25: 2 }));
+    const explicitHalf = calculateNetto(defaultInput({ gewinn: 120000, childrenUnder25: 2, kfbZaehler: 1.0 }));
+    expect(unmarried.ok && explicitHalf.ok).toBe(true);
+    if (unmarried.ok && explicitHalf.ok) {
+      expect(unmarried.result.festSoli.euros).toBe(explicitHalf.result.festSoli.euros);
+      expect(unmarried.result.nettoAnnual.euros).toBe(explicitHalf.result.nettoAnnual.euros);
+    }
+    const married = calculateNetto(defaultInput({ gewinn: 120000, childrenUnder25: 2, married: true }));
+    const explicitFull = calculateNetto(
+      defaultInput({ gewinn: 120000, childrenUnder25: 2, married: true, kfbZaehler: 2.0 }),
+    );
+    expect(married.ok && explicitFull.ok).toBe(true);
+    if (married.ok && explicitFull.ok) {
+      expect(married.result.festSoli.euros).toBe(explicitFull.result.festSoli.euros);
+    }
+  });
+
+  it('rejects kfbZaehler that is not a 0.5-step or exceeds childrenUnder25 × 1.0', () => {
+    const step = calculateNetto(defaultInput({ gewinn: 80000, childrenUnder25: 2, kfbZaehler: 0.25 }));
+    expect(step.ok).toBe(false);
+    if (!step.ok) expect(step.errors.some((e) => e.field === 'kfbZaehler')).toBe(true);
+    const over = calculateNetto(defaultInput({ gewinn: 80000, childrenUnder25: 2, kfbZaehler: 2.5 }));
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.errors.some((e) => e.field === 'kfbZaehler')).toBe(true);
+    const withKidsZero = calculateNetto(defaultInput({ gewinn: 80000, childrenUnder25: 0, kfbZaehler: 0.5 }));
+    expect(withKidsZero.ok).toBe(false);
+    const atMax = calculateNetto(defaultInput({ gewinn: 80000, childrenUnder25: 2, kfbZaehler: 2.0 }));
+    expect(atMax.ok).toBe(true);
+    const atZero = calculateNetto(defaultInput({ gewinn: 80000, childrenUnder25: 2, kfbZaehler: 0 }));
+    expect(atZero.ok).toBe(true);
   });
 });
 
