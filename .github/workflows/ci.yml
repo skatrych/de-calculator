@@ -23,6 +23,9 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run check:privacy
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - run: npm run check:a11y
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: actions/upload-pages-artifact@v3

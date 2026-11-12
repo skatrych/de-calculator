@@ -24,6 +24,8 @@ npm run typecheck
 npm run dev       # http://localhost:5173/de-calculator/
 npm run build     # statische Seite nach dist/, Basis-Pfad /de-calculator/
 npm run check:privacy
+npm run check:a11y  # axe + no horizontal overflow at 360/390/1280 (needs Playwright Chromium)
+
 npm run preview
 ```
 

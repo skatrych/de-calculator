@@ -396,7 +396,7 @@ function appendBreakdownTable(parent: HTMLElement, r: YearResult, caption: strin
   const cap = el('caption', { className: 'section-title', text: caption });
   const thead = el('thead');
   const hr = el('tr');
-  hr.append(el('th', { text: '' }), el('th', { text: 'Jahr' }), el('th', { text: 'Monat' }));
+  hr.append(el('th', { text: 'Position', attrs: { scope: 'col' } }), el('th', { text: 'Jahr', attrs: { scope: 'col' } }), el('th', { text: 'Monat', attrs: { scope: 'col' } }));
   thead.append(hr);
   const body = el('tbody');
   const rows: Array<[string, YearResult[keyof YearResult] | undefined, boolean?]> = [
@@ -457,6 +457,10 @@ function monthlyFrom(annualCents: number): number {
 function appendTaxDetails(parent: HTMLElement, r: YearResult): void {
   parent.append(el('h3', { className: 'section-title', text: 'Steuerliche Zwischenwerte' }));
   const table = el('table', { className: 'break' });
+  const thead = el('thead');
+  const hr = el('tr');
+  hr.append(el('th', { text: 'Kennzahl', attrs: { scope: 'col' } }), el('th', { text: 'Betrag', attrs: { scope: 'col' } }));
+  thead.append(hr);
   const body = el('tbody');
   const lines: Array<[string, string]> = [
     ['Zu versteuerndes Einkommen', formatEuro(r.zve)],
@@ -485,21 +489,21 @@ function appendTaxDetails(parent: HTMLElement, r: YearResult): void {
     tr.append(el('td', { text: k }), el('td', { text: v, className: 'cent' }));
     body.append(tr);
   }
-  table.append(body);
+  table.append(thead, body);
   parent.append(table);
 }
 
 function renderYearResult(r: YearResult, headlineTitle: string): HTMLElement {
   const wrap = el('div');
   const head = el('div', { className: 'headline' });
-  head.append(el('p', { className: 'eyebrow', text: headlineTitle }));
+  head.append(el('h2', { className: 'eyebrow', text: headlineTitle }));
   head.append(el('div', { className: 'amount', text: formatEuro(r.nettoAnnual) }));
   head.append(el('p', { className: 'sub', text: `${formatEuro(r.nettoMonthly)}  ·  Monat` }));
   wrap.append(head);
   const rates = el('div', { className: 'rates' });
-  const e1 = el('div', { className: 'rate-card' });
+  const e1 = el('dl', { className: 'rate-card' });
   e1.append(el('dt', { text: 'Effektive Gesamtbelastung' }), el('dd', { text: formatPercent(r.effectiveBurdenPercent) }));
-  const e2 = el('div', { className: 'rate-card' });
+  const e2 = el('dl', { className: 'rate-card' });
   e2.append(
     el('dt', { text: 'Effektive Grenzbelastung' }),
     el('dd', { text: formatPercent(r.marginalBurdenPercent) }),
@@ -514,7 +518,7 @@ function renderYearResult(r: YearResult, headlineTitle: string): HTMLElement {
 function renderAverage(r: MultiYearResult): HTMLElement {
   const wrap = el('div');
   const head = el('div', { className: 'headline' });
-  head.append(el('p', { className: 'eyebrow', text: 'Dreijahresdurchschnitt (Jahr)' }));
+  head.append(el('h2', { className: 'eyebrow', text: 'Dreijahresdurchschnitt (Jahr)' }));
   head.append(el('div', { className: 'amount', text: formatEuro(r.avg_netto) }));
   head.append(el('p', { className: 'sub', text: `${formatEuro(r.avg_monthly)}  ·  Dreijahresdurchschnitt (Monat)` }));
   wrap.append(head);
@@ -557,7 +561,7 @@ function renderAverage(r: MultiYearResult): HTMLElement {
   wrap.append(label);
 
   const rates = el('div', { className: 'rates rates-single' });
-  const e1 = el('div', { className: 'rate-card' });
+  const e1 = el('dl', { className: 'rate-card' });
   e1.append(el('dt', { text: 'Effektive Gesamtbelastung' }), el('dd', { text: formatPercent(r.avg_effective) }));
   rates.append(e1);
   wrap.append(rates);
@@ -566,7 +570,7 @@ function renderAverage(r: MultiYearResult): HTMLElement {
   table.append(el('caption', { className: 'section-title', text: 'Durchschnitt je Position' }));
   const thead = el('thead');
   const hr = el('tr');
-  hr.append(el('th', { text: '' }), el('th', { text: 'Jahr' }), el('th', { text: 'Monat' }));
+  hr.append(el('th', { text: 'Position', attrs: { scope: 'col' } }), el('th', { text: 'Jahr', attrs: { scope: 'col' } }), el('th', { text: 'Monat', attrs: { scope: 'col' } }));
   thead.append(hr);
   const body = el('tbody');
   const avgRows: Array<[string, MultiYearResult[keyof MultiYearResult]]> = [
@@ -608,7 +612,7 @@ function renderAverage(r: MultiYearResult): HTMLElement {
   const grid = el('div', { className: 'year-grid cols-3' });
   for (const y of r.perYear) {
     const card = el('article', { className: 'year-card' });
-    const h = el('h3', { text: String(y.year) });
+    const h = el('h4', { text: String(y.year) });
     if (y.overrideUsed) h.append(el('span', { className: 'flag', text: 'laut Steuerbescheid' }));
     card.append(h);
     const rows: Array<[string, string, boolean?]> = [

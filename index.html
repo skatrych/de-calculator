@@ -25,7 +25,6 @@
           Schätzung nach den gesetzlichen Regeln der Jahre 2023–2026.
           Standard: Dreijahresdurchschnitt der letzten abgeschlossenen Jahre.
         </p>
-      </header>
 
       <aside class="disclaimer-banner" role="note">
         <p>
@@ -43,14 +42,16 @@
         <strong>Datenschutz:</strong>
         Diese Anwendung läuft vollständig in Ihrem Browser. Es gibt keinen Server, der Ihre Angaben entgegennimmt. Es werden keine Cookies gesetzt und keine Daten im Browser gespeichert (kein localStorage, sessionStorage oder IndexedDB). Ihre Eingaben stehen nicht in der Adresszeile und werden nicht an Dritte übermittelt. Es gibt keine Analyse- oder Trackingdienste. Nach dem Schließen oder Neuladen der Seite sind die Eingaben gelöscht.
       </p>
+      </header>
 
+      <main>
       <div id="sticky-netto" class="sticky-netto is-hidden" aria-live="polite">
         <span class="sticky-netto-label" id="sticky-netto-label">Dreijahresdurchschnitt</span>
         <strong id="sticky-netto-value">—</strong>
         <span class="sticky-netto-sub" id="sticky-netto-sub"></span>
       </div>
 
-      <main class="layout">
+      <div class="layout">
         <form id="calc-form" class="panel form" autocomplete="off">
           <fieldset class="segmented-field">
             <legend>Berechnungsart</legend>
@@ -305,6 +306,10 @@
           </p>
           <div id="results-body" class="is-hidden"></div>
         </section>
+      </div>
+        <noscript>
+          <p>Dieser Rechner benötigt JavaScript. Es wird ausschließlich in Ihrem Browser ausgeführt, ohne Verbindung zu einem Server.</p>
+        </noscript>
       </main>
 
       <footer class="footer">
@@ -343,9 +348,6 @@
         </p>
       </footer>
     </div>
-    <noscript>
-      <p>Dieser Rechner benötigt JavaScript. Es wird ausschließlich in Ihrem Browser ausgeführt, ohne Verbindung zu einem Server.</p>
-    </noscript>
     <script type="module" src="./src/ui/main.ts"></script>
   </body>
 </html>

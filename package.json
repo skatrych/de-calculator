@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "check:privacy": "node scripts/check-privacy.mjs",
-    "cli": "node --experimental-strip-types src/cli/cli.ts"
+    "cli": "node --experimental-strip-types src/cli/cli.ts",
+    "check:a11y": "node scripts/check-a11y.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -21,7 +22,9 @@
     "decimal.js": "^10.6.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@types/node": "^24.10.1",
+    "playwright": "^1.65.0",
     "typescript": "^5.9.3",
     "vite": "^7.2.2",
     "vitest": "^4.0.8"
