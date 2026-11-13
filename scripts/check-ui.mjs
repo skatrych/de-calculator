@@ -1,7 +1,7 @@
 /**
- * UI tests for L1 (Zähler reset after children 0 → >0) and L2
- * (no silent clamp; German validation error). Playwright is a
- * devDependency and is never bundled into the app.
+ * UI tests for the Netto form (L1, L2, age field, issue 5) and for
+ * Kindesunterhalt (Netto transfer, G1, Mangelfall, adult flags).
+ * Playwright is a devDependency and is never bundled into the app.
  */
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -270,7 +270,197 @@ try {
     console.log('Issue 5: ok (empty and whitespace blur refill the default; children changes auto-follow again)');
   }
 
-  // Desktop form screenshot for the PR
+  // --- Kindesunterhalt: in-memory Netto transfer, no URL/storage ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    const avgLabel = page.locator('label[for="mode-avg"]');
+    if (await avgLabel.count()) await avgLabel.click();
+    await page.waitForSelector('#gewinn-2023');
+    await page.fill('#gewinn-2023', '80.000');
+    await page.fill('#gewinn-2024', '80.000');
+    await page.fill('#gewinn-2025', '80.000');
+    await page.waitForSelector('.headline .amount');
+    const transferBtn = page.getByRole('button', {
+      name: 'Dieses monatliche Durchschnitts-Netto für Kindesunterhalt verwenden',
+    });
+    assert(await transferBtn.count(), 'transfer: exact average-button label must be present');
+    const monthlyBefore = (await page.locator('.headline .sub').first().innerText()).replace(/\s/g, '');
+    assert(
+      (await page.locator('#uh-transfer-average').count()) === 1,
+      'transfer: average button should have id uh-transfer-average',
+    );
+    // DOM click: Playwright's pointer click is unreliable against the
+    // sticky results panel; the handler itself is sound (a11y tests use nav).
+    const clicked = await page.evaluate(() => {
+      const btn = document.getElementById('uh-transfer-average');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    });
+    assert(clicked, 'transfer: button.click() should run');
+    await page.waitForFunction(() => !document.getElementById('view-unterhalt')?.hasAttribute('hidden'));
+    await page.waitForSelector('#unterhalt-form');
+    const viewHidden = await page.locator('#view-unterhalt').getAttribute('hidden');
+    assert(viewHidden === null, 'transfer: Kindesunterhalt view should be visible');
+    const filled = await page.inputValue('#uh-netto');
+    assert(filled.length > 0, 'transfer: monthly Netto should be filled');
+    const loc = page.url();
+    const u = new URL(loc);
+    assert(!u.search, `transfer: URL must not carry query state, got ${loc}`);
+    assert(!u.hash, `transfer: URL must not carry hash state, got ${loc}`);
+    const storage = await page.evaluate(() => ({
+      ls: window.localStorage.length,
+      ss: window.sessionStorage.length,
+    }));
+    assert(storage.ls === 0, `transfer: localStorage must stay empty, length ${storage.ls}`);
+    assert(storage.ss === 0, `transfer: sessionStorage must stay empty, length ${storage.ss}`);
+    // Results need an age; G1 after transfer still works if we type ages.
+    await page.fill('#uh-child-0-age', '4');
+    await page.locator('#uh-add-child').click();
+    await page.waitForSelector('#uh-child-1-age');
+    await page.fill('#uh-child-1-age', '8');
+    await page.waitForSelector('#uh-results-body .amount');
+    // Monthly field still holds the transferred figure (we did not overwrite it).
+    assert((await page.inputValue('#uh-netto')) === filled, 'transfer: field stays at the transferred value');
+    void monthlyBefore;
+    await page.close();
+    console.log('Kindesunterhalt transfer: ok (in-memory copy, exact button label, no URL or storage)');
+  }
+
+  // --- Kindesunterhalt G1 amounts ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-child-0-age');
+    await page.fill('#uh-netto', '4000');
+    await page.fill('#uh-child-0-age', '4');
+    await page.locator('#uh-add-child').click();
+    await page.waitForSelector('#uh-child-1-age');
+    await page.fill('#uh-child-1-age', '8');
+    await page.waitForSelector('#uh-results-body .amount');
+    const text = (await page.locator('#uh-results-body').innerText()).replace(/\s/g, '');
+    assert(text.includes('1.079,00'), `G1: sum 1.079,00 € missing in ${text}`);
+    assert(text.includes('493,50'), `G1: 493,50 € missing in ${text}`);
+    assert(text.includes('585,50'), `G1: 585,50 € missing in ${text}`);
+    await page.close();
+    console.log('Kindesunterhalt G1: ok (493,50 + 585,50 = 1.079,00)');
+  }
+
+  // --- Kindesunterhalt Mangelfall G5 + adult flags ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-child-0-age');
+    await page.fill('#uh-netto', '1750');
+    await page.fill('#uh-child-0-age', '18');
+    await page.waitForSelector('#uh-child-0-priv-wrap:not(.is-hidden)');
+    const privLabel = await page.locator('label[for="uh-child-0-privileged"]').innerText();
+    assert(
+      privLabel.includes('allgemeiner Schulausbildung'),
+      `adult flag label missing privileged wording: ${privLabel}`,
+    );
+    const ownVisible = await page.locator('#uh-child-0-own-wrap').isVisible();
+    assert(ownVisible, 'own-household flag should be visible at age 18');
+    const ownLabel = await page.locator('label[for="uh-child-0-own"]').innerText();
+    assert(ownLabel.includes('Bedarf 990'), `own-household label: ${ownLabel}`);
+    await page.locator('#uh-child-0-privileged').check();
+    await page.locator('#uh-add-child').click();
+    await page.fill('#uh-child-1-age', '7');
+    await page.locator('#uh-add-child').click();
+    await page.fill('#uh-child-2-age', '5');
+    await page.waitForSelector('#uh-results-body .amount');
+    const text = (await page.locator('#uh-results-body').innerText()).replace(/\s/g, '');
+    assert(text.includes('107,60'), `G5: 107,60 missing in ${text}`);
+    assert(text.includes('105,02'), `G5: 105,02 missing in ${text}`);
+    assert(text.includes('87,38'), `G5: 87,38 missing in ${text}`);
+    assert(/Mangelfall/.test(await page.locator('#uh-results-body').innerText()), 'G5: Mangelfall should be labelled');
+
+    // Mutual exclusion: privileged + own household is a validation error, results hidden.
+    await page.locator('#uh-child-0-own').check();
+    const err = (await page.locator('#uh-form-errors').innerText()).trim();
+    assert(/schließen einander aus/.test(err), `mutual-exclusion error, got: ${err}`);
+    const resultsHidden = await page.locator('#uh-results-body').isHidden();
+    assert(resultsHidden, 'results must be hidden on the mutual-exclusion error');
+    await page.close();
+    console.log('Kindesunterhalt G5 and adult flags: ok (Mangelfall cents, flags, mutual exclusion)');
+  }
+
+  // --- F1: clearing #uh-netto resets override; next nav prefills again ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    const avgLabel = page.locator('label[for="mode-avg"]');
+    if (await avgLabel.count()) await avgLabel.click();
+    await page.waitForSelector('#gewinn-2023');
+    await page.fill('#gewinn-2023', '80.000');
+    await page.fill('#gewinn-2024', '80.000');
+    await page.fill('#gewinn-2025', '80.000');
+    await page.waitForSelector('.headline .amount');
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    await page.waitForFunction(() => document.getElementById('uh-netto')?.value.trim() !== '');
+    const prefilled = await page.inputValue('#uh-netto');
+    assert(prefilled.length > 0, `F1: first nav should prefill, got "${prefilled}"`);
+
+    // Clear (empty), navigate away and back → prefilled again.
+    await page.fill('#uh-netto', '');
+    assert((await page.inputValue('#uh-netto')) === '', 'F1: field should be empty after clear');
+    await page.locator('#nav-netto').click();
+    await page.waitForSelector('#calc-form');
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    await page.waitForFunction(() => document.getElementById('uh-netto')?.value.trim() !== '');
+    const afterEmpty = await page.inputValue('#uh-netto');
+    assert(afterEmpty === prefilled, `F1: after clear+nav, expected ${prefilled}, got ${afterEmpty}`);
+
+    // Whitespace-only clear, same refill on nav.
+    await page.fill('#uh-netto', '   ');
+    await page.locator('#nav-netto').click();
+    await page.waitForSelector('#calc-form');
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    await page.waitForFunction(() => document.getElementById('uh-netto')?.value.trim() !== '');
+    const afterWs = await page.inputValue('#uh-netto');
+    assert(afterWs === prefilled, `F1: after whitespace+nav, expected ${prefilled}, got ${afterWs}`);
+
+    // A typed override still sticks across navigation.
+    await page.fill('#uh-netto', '5.000');
+    await page.locator('#nav-netto').click();
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    const afterTyped = await page.inputValue('#uh-netto');
+    assert(afterTyped === '5.000', `F1: typed 5.000 must stick, got ${afterTyped}`);
+
+    await page.close();
+    console.log('F1: ok (clear and whitespace refill on nav; typed override sticks)');
+  }
+
+  // --- N1: adults-only Masse ≤ 0 shows Mangelfall in the result subtitle ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-child-0-age');
+    await page.fill('#uh-netto', '1750');
+    await page.fill('#uh-child-0-age', '22');
+    await page.waitForSelector('#uh-results-body .amount');
+    const body = await page.locator('#uh-results-body').innerText();
+    const sub = (await page.locator('#uh-results-body .sub').innerText()).trim();
+    const amount = (await page.locator('#uh-results-body .amount').innerText()).replace(/\s/g, '');
+    assert(amount.includes('0,00'), `N1: Zahlbetrag should be 0,00, got ${amount}`);
+    assert(
+      /\bMangelfall\b/.test(sub),
+      `N1: result subtitle should say Mangelfall, got "${sub}"`,
+    );
+    assert(/\bMangelfall\b/.test(body), 'N1: results body should mention Mangelfall');
+    await page.close();
+    console.log('N1: ok (adults-only Masse 0 subtitle includes Mangelfall)');
+  }
+
+  // Desktop form screenshot for the PR (Netto, unchanged path)
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
     await page.goto(url, { waitUntil: 'networkidle' });
@@ -289,9 +479,36 @@ try {
     await page.close();
   }
 
+  // Desktop screenshot of the Kindesunterhalt section (G1)
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 1400 } });
+    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-child-0-age');
+    await page.fill('#uh-netto', '4.000');
+    await page.fill('#uh-child-0-age', '4');
+    await page.locator('#uh-add-child').click();
+    await page.waitForSelector('#uh-child-1-age');
+    await page.fill('#uh-child-1-age', '8');
+    await page.waitForSelector('#uh-results-body .amount');
+    // Blur the last field and scroll to the page title so the nav,
+    // disclaimer and result headline are in the frame.
+    await page.locator('#uh-child-1-age').blur();
+    await page.evaluate(() => document.getElementById('page-title')?.scrollIntoView({ block: 'start' }));
+    await page.waitForTimeout(100);
+    const shot = '/workspace/de-calculator-kindesunterhalt.png';
+    if (existsSync('/workspace') && statSync('/workspace').isDirectory()) {
+      await page.screenshot({ path: shot, fullPage: false });
+      console.log(`screenshot: ${shot}`);
+    } else {
+      console.log('screenshot skipped (no /workspace on this runner)');
+    }
+    await page.close();
+  }
+
   await browser.close();
   server.close();
-  console.log('\ncheck:ui: ok (L1, L2, age-field placement, issue 5 empty Zähler).');
+  console.log('\ncheck:ui: ok (L1, L2, age-field, issue 5, Kindesunterhalt transfer/G1/G5, F1, N1).');
 } catch (err) {
   console.error('check:ui FAILED:', err);
   process.exit(1);

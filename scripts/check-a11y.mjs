@@ -99,6 +99,54 @@ async function fillAverage(page) {
   await openAllDetails(page);
 }
 
+
+async function openUnterhalt(page) {
+  await page.locator('#nav-unterhalt').click();
+  await page.waitForSelector('#unterhalt-form');
+  await page.waitForSelector('#uh-child-0-age');
+}
+
+async function fillUnterhaltTwoChildren(page) {
+  await openUnterhalt(page);
+  await page.fill('#uh-netto', '4000');
+  await page.fill('#uh-child-0-age', '4');
+  await page.locator('#uh-add-child').click();
+  await page.waitForSelector('#uh-child-1-age');
+  await page.fill('#uh-child-1-age', '8');
+  await page.waitForSelector('#uh-results-body .amount');
+  await openAllDetails(page);
+}
+
+async function fillUnterhaltMangelfall(page) {
+  await openUnterhalt(page);
+  await page.fill('#uh-netto', '1750');
+  await page.fill('#uh-child-0-age', '18');
+  await page.waitForSelector('#uh-child-0-priv-wrap:not(.is-hidden)');
+  await page.locator('#uh-child-0-privileged').check();
+  await page.locator('#uh-add-child').click();
+  await page.waitForSelector('#uh-child-1-age');
+  await page.fill('#uh-child-1-age', '7');
+  await page.locator('#uh-add-child').click();
+  await page.waitForSelector('#uh-child-2-age');
+  await page.fill('#uh-child-2-age', '5');
+  await page.waitForSelector('#uh-results-body .amount');
+  await openAllDetails(page);
+}
+
+async function fillUnterhaltAdultFlags(page) {
+  await openUnterhalt(page);
+  await page.fill('#uh-netto', '4000');
+  await page.fill('#uh-child-0-age', '19');
+  await page.waitForSelector('#uh-child-0-priv-wrap:not(.is-hidden)');
+  await page.waitForSelector('#uh-child-0-own-wrap:not(.is-hidden)');
+  await page.locator('#uh-child-0-privileged').check();
+  await page.locator('#uh-add-child').click();
+  await page.waitForSelector('#uh-child-1-age');
+  await page.fill('#uh-child-1-age', '8');
+  await page.waitForSelector('#uh-results-body .amount');
+  await openAllDetails(page);
+}
+
 async function fillSingle(page) {
   await page.locator('label[for="mode-single"]').click();
   await page.waitForSelector('#gewinn-2026');
@@ -207,6 +255,49 @@ try {
       }
       await context.close();
     }
+
+    for (const mode of ['unterhalt-two-children', 'unterhalt-mangelfall', 'unterhalt-adult-flags']) {
+      const context = await browser.newContext({
+        viewport: { width: vp.width, height: vp.height },
+        locale: 'de-DE',
+      });
+      const page = await context.newPage();
+      page.on('pageerror', (err) => {
+        failures.push(`${vp.name}/${mode} pageerror: ${err}`);
+      });
+      await page.goto(url, { waitUntil: 'load' });
+      if (mode === 'unterhalt-two-children') await fillUnterhaltTwoChildren(page);
+      else if (mode === 'unterhalt-mangelfall') await fillUnterhaltMangelfall(page);
+      else await fillUnterhaltAdultFlags(page);
+      await page.waitForTimeout(150);
+
+      const overflow = await measureOverflow(page);
+      const fits = overflow.scrollWidth <= overflow.clientWidth;
+      const axe = await runAxe(page);
+      const label = `${vp.name}px ${mode}`;
+      report.push({ label, overflow, fits, axe });
+      console.log(
+        `${label}: scrollWidth=${overflow.scrollWidth} clientWidth=${overflow.clientWidth} ${
+          fits ? 'FIT' : 'OVERFLOW'
+        }  axe violations=${axe.length}`,
+      );
+      if (!fits) {
+        failures.push(
+          `${label}: horizontal overflow (scrollWidth ${overflow.scrollWidth} > clientWidth ${overflow.clientWidth})`,
+        );
+        if (overflow.overflowing.length) {
+          console.log('  overflowing elements:', JSON.stringify(overflow.overflowing, null, 2));
+        }
+      }
+      if (axe.length) {
+        failures.push(`${label}: ${axe.length} axe violation(s)`);
+        for (const v of axe) {
+          console.log(`  axe ${v.id} (${v.impact}, ${v.nodes} nodes): ${v.help}`);
+          console.log(`    targets: ${JSON.stringify(v.targets)}`);
+        }
+      }
+      await context.close();
+    }
   }
 } finally {
   await browser.close();
@@ -218,4 +309,4 @@ if (failures.length) {
   for (const f of failures) console.error(' -', f);
   process.exit(1);
 }
-console.log('\ncheck:a11y: ok (0 axe violations, no horizontal overflow at 360/390/1280 in both modes).');
+console.log('\ncheck:a11y: ok (0 axe violations, no horizontal overflow at 360/390/1280 in Netto and Kindesunterhalt views).');

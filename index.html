@@ -20,13 +20,17 @@
     <div class="page">
       <header class="header">
         <p class="kicker">de-calculator</p>
-        <h1>Netto-Einkommen für Selbständige</h1>
-        <p class="lead">
+        <nav class="app-nav" aria-label="Rechner">
+          <button type="button" id="nav-netto" aria-current="page">Netto-Einkommen</button>
+          <button type="button" id="nav-unterhalt">Kindesunterhalt</button>
+        </nav>
+        <h1 id="page-title">Netto-Einkommen für Selbständige</h1>
+        <p class="lead" id="page-lead">
           Schätzung nach den gesetzlichen Regeln der Jahre 2023–2026.
           Standard: Dreijahresdurchschnitt der letzten abgeschlossenen Jahre.
         </p>
 
-      <aside class="disclaimer-banner" role="note">
+      <aside id="disclaimer-steuer" class="disclaimer-banner" role="note">
         <p>
           <strong>Keine Steuerberatung.</strong>
           Diese Berechnung ist eine vereinfachte Schätzung nach den gesetzlichen Regeln
@@ -38,6 +42,15 @@
         </p>
       </aside>
 
+      <aside id="disclaimer-unterhalt" class="disclaimer-banner" role="note" hidden>
+        <p>
+          <strong>Keine Rechtsberatung.</strong>
+          Die Düsseldorfer Tabelle ist eine Richtlinie, keine gesetzliche Festsetzung.
+          Diese Berechnung ersetzt keine Rechtsberatung. Für die konkrete Festsetzung sind
+          das zuständige Amtsgericht und, soweit einschlägig, das Jugendamt zuständig.
+        </p>
+      </aside>
+
       <p class="privacy-banner" role="note">
         <strong>Datenschutz:</strong>
         Diese Anwendung läuft vollständig in Ihrem Browser. Es gibt keinen Server, der Ihre Angaben entgegennimmt. Es werden keine Cookies gesetzt und keine Daten im Browser gespeichert (kein localStorage, sessionStorage oder IndexedDB). Ihre Eingaben stehen nicht in der Adresszeile und werden nicht an Dritte übermittelt. Es gibt keine Analyse- oder Trackingdienste. Nach dem Schließen oder Neuladen der Seite sind die Eingaben gelöscht.
@@ -45,6 +58,7 @@
       </header>
 
       <main>
+      <div id="view-netto">
       <div id="sticky-netto" class="sticky-netto is-hidden" aria-live="polite">
         <span class="sticky-netto-label" id="sticky-netto-label">Dreijahresdurchschnitt</span>
         <strong id="sticky-netto-value">—</strong>
@@ -313,6 +327,116 @@
           <div id="results-body" class="is-hidden"></div>
         </section>
       </div>
+
+      </div><!-- /view-netto -->
+
+      <div id="view-unterhalt" class="is-hidden" hidden>
+      <div class="layout">
+        <form id="unterhalt-form" class="panel form" autocomplete="off">
+          <p class="form-kicker">Düsseldorfer Tabelle 2026 · Residenzmodell</p>
+
+          <div class="field">
+            <label for="uh-netto">Monatliches unterhaltsrechtliches Netto</label>
+            <div class="input-suffix">
+              <input id="uh-netto" type="text" inputmode="decimal" autocomplete="off" aria-describedby="uh-netto-hint uh-netto-source" />
+              <span class="suffix">€</span>
+            </div>
+            <p class="hint" id="uh-netto-hint">Nach Steuern und Sozialabgaben, vor den optionalen Abzügen unten. Vorgabe ist der Dreijahresdurchschnitt aus dem Netto-Rechner, soweit er in dieser Sitzung berechnet wurde.</p>
+            <p class="hint" id="uh-netto-source" hidden></p>
+          </div>
+
+          <fieldset>
+            <legend>Optional Abzüge und Angaben</legend>
+            <div class="field">
+              <label for="uh-retirement">Zusätzliche Altersvorsorge</label>
+              <div class="input-suffix">
+                <input id="uh-retirement" type="text" inputmode="decimal" autocomplete="off" />
+                <span class="suffix">€</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="uh-work">Berufsbedingte Aufwendungen (konkret)</label>
+              <div class="input-suffix">
+                <input id="uh-work" type="text" inputmode="decimal" autocomplete="off" />
+                <span class="suffix">€</span>
+              </div>
+              <p class="hint">Keine automatische 5-%-Pauschale. Bitte nur konkrete, nachweisbare Beträge.</p>
+            </div>
+            <div class="field">
+              <label for="uh-debts">Schulden / Tilgung</label>
+              <div class="input-suffix">
+                <input id="uh-debts" type="text" inputmode="decimal" autocomplete="off" />
+                <span class="suffix">€</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="uh-other-ded">Sonstige Abzüge</label>
+              <div class="input-suffix">
+                <input id="uh-other-ded" type="text" inputmode="decimal" autocomplete="off" />
+                <span class="suffix">€</span>
+              </div>
+            </div>
+            <label class="check" for="uh-erwerb">
+              <input id="uh-erwerb" type="checkbox" checked autocomplete="off" />
+              <span class="check-text">Ich bin erwerbstätig</span>
+            </label>
+            <div class="field">
+              <label for="uh-warmmiete">Warmmiete (optional)</label>
+              <div class="input-suffix">
+                <input id="uh-warmmiete" type="text" inputmode="decimal" autocomplete="off" aria-describedby="uh-warm-hint" />
+                <span class="suffix">€</span>
+              </div>
+              <p class="hint" id="uh-warm-hint">Erhöht den Selbstbehalt nur, wenn sie den darin enthaltenen Betrag (520 € notwendig / 650 € angemessen) übersteigt. Senkt ihn nicht.</p>
+            </div>
+            <div class="field">
+              <label for="uh-other-uh">Sonstiger Unterhalt (optional)</label>
+              <div class="input-suffix">
+                <input id="uh-other-uh" type="text" inputmode="decimal" autocomplete="off" aria-describedby="uh-other-uh-hint" />
+                <span class="suffix">€</span>
+              </div>
+              <p class="hint" id="uh-other-uh-hint">Bereits feststehender Unterhalt an andere Berechtigte (etwa Ehegatte). Wird beim Bedarfskontrollbetrag und bei der Masse berücksichtigt, ist aber kein Kindes-Einsatzbetrag.</p>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Kinder</legend>
+            <p class="hint">Bitte kein Name und kein Geburtsdatum — nur das Alter in vollendeten Jahren.</p>
+            <div id="uh-children"></div>
+            <p>
+              <button type="button" id="uh-add-child" class="btn-add">Kind hinzufügen</button>
+            </p>
+          </fieldset>
+
+          <div class="field">
+            <label for="uh-anzahl">Anzahl der Unterhaltsberechtigten</label>
+            <input id="uh-anzahl" type="text" inputmode="numeric" autocomplete="off" aria-describedby="uh-anzahl-hint" />
+            <p class="hint" id="uh-anzahl-hint">Standard ist die Zahl der eingetragenen Kinder. Höher ansetzen, wenn weitere Berechtigte (etwa ein Ehegatte) die Gruppierung beeinflussen. Steuert die automatische Höher- oder Herabstufung um eine Gruppe je Berechtigtem abweichend von zwei.</p>
+          </div>
+          <div class="field">
+            <label for="uh-gruppe">Zusätzliche Gruppenverschiebung</label>
+            <input id="uh-gruppe" type="text" inputmode="numeric" value="0" autocomplete="off" aria-describedby="uh-gruppe-hint" />
+            <p class="hint" id="uh-gruppe-hint">Ganzzahl, zusätzlich zur automatischen ±1-Regel. Zum Beispiel −1 bei erweitertem Umgang. Die ±1-Regel ist eine weit verbreitete Praxis, kein verbindlicher Satz der Anmerkungen 2026.</p>
+          </div>
+          <div class="field">
+            <label for="uh-other-parent">Bereinigtes Netto des anderen Elternteils (optional)</label>
+            <div class="input-suffix">
+              <input id="uh-other-parent" type="text" inputmode="decimal" autocomplete="off" aria-describedby="uh-other-parent-hint" />
+              <span class="suffix">€</span>
+            </div>
+            <p class="hint" id="uh-other-parent-hint">Nur für den Haftungsanteil bei volljährigen Kindern. Bei Minderjährigen im Residenzmodell erfüllt der betreuende Elternteil seine Pflicht durch Betreuung.</p>
+          </div>
+
+          <p id="uh-form-errors" class="errors" role="alert" hidden></p>
+        </form>
+
+        <section id="uh-results" class="panel results" aria-live="polite">
+          <p class="results-placeholder" id="uh-results-placeholder">
+            Geben Sie Ihr monatliches unterhaltsrechtliches Netto und das Alter der Kinder ein — das Ergebnis erscheint sofort.
+          </p>
+          <div id="uh-results-body" class="is-hidden"></div>
+        </section>
+      </div>
+      </div><!-- /view-unterhalt -->
         <noscript>
           <p>Dieser Rechner benötigt JavaScript. Es wird ausschließlich in Ihrem Browser ausgeführt, ohne Verbindung zu einem Server.</p>
         </noscript>
@@ -332,6 +456,25 @@
           dem Einkommensteuerbescheid bemessen; andere Einnahmen (Kapital, Vermietung) können
           die Bemessungsgrundlage erhöhen und sind in Version 1 nicht modelliert.
         </p>
+        <h2>Keine Rechtsberatung (Kindesunterhalt)</h2>
+        <p>
+          Die Düsseldorfer Tabelle ist eine Richtlinie, keine gesetzliche Festsetzung.
+          Diese Berechnung ersetzt keine Rechtsberatung. Für die konkrete Festsetzung sind
+          das zuständige Amtsgericht und, soweit einschlägig, das Jugendamt zuständig.
+        </p>
+        <details>
+          <summary>Bekannte Vereinfachungen (Kindesunterhalt)</summary>
+          <ol class="limits">
+            <li>Die Tabelle ist eine Richtlinie, kein Gesetz. Gerichte können abweichen.</li>
+            <li>Die automatische Höher- oder Herabstufung um eine Gruppe je Berechtigtem abweichend von zwei ist eine Produktvorgabe, kein Satz der Anmerkungen 2026, und jederzeit überschreibbar.</li>
+            <li>Das Ausgangs-Netto ist nur so gut wie der Netto-Rechner und Ihre Anpassung. Unterhaltsspezifische Gewinnkorrekturen sind nicht modelliert.</li>
+            <li>Mehrbedarf und Sonderbedarf (Kita, Krankenversicherung des Kindes, Studiengebühren) sind nicht enthalten. Wechselmodell, Ehegatten- und Betreuungsunterhalt sind nicht Gegenstand dieser Berechnung.</li>
+            <li>Oberhalb von 11.200 € monatlichem Netto ist das Ergebnis die Untergrenze der Gruppe 15; ein höherer konkreter Bedarf ist nicht Gegenstand dieser Berechnung.</li>
+            <li>Der Haftungsanteil bei volljährigen Kindern kann ohne das Netto des anderen Elternteils nicht abgeschlossen werden.</li>
+            <li>Leitlinien anderer Oberlandesgerichte können berufsbedingte Pauschalen und Altersvorsorge-Höchstbeträge anders behandeln.</li>
+            <li>Die Rundung eines gerichtlichen Titels kann nach den Leitlinien NRW Nr. 25 auf volle Euro erfolgen. Angezeigt werden die amtlichen Zahlbeträge (einschließlich 50-Cent-Beträge) und die amtlichen Mangelfall-Centbeträge.</li>
+          </ol>
+        </details>
         <details>
           <summary>Bekannte Vereinfachungen</summary>
           <ol class="limits">
@@ -349,8 +492,9 @@
           </ol>
         </details>
         <p class="footer-meta">
-          Spezifikation:
-          <a href="https://github.com/skatrych/de-calculator/blob/main/docs/SPEC-netto-selbststaendige.md">SPEC-netto-selbststaendige.md</a>
+          Spezifikationen:
+          <a href="https://github.com/skatrych/de-calculator/blob/main/docs/SPEC-netto-selbststaendige.md">SPEC-netto-selbststaendige.md</a>,
+          <a href="https://github.com/skatrych/de-calculator/blob/main/docs/specs/kindesunterhalt.md">kindesunterhalt.md</a>
         </p>
       </footer>
     </div>
