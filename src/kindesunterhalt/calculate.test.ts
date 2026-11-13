@@ -456,3 +456,134 @@ describe('money helpers stay at official half-euros (SPEC §6, §15)', () => {
     expect(toMoney(d('1079')).euros).toBe('1079.00');
   });
 });
+
+describe('decision goldens (PR #9 decisions 1 and 8)', () => {
+  it('D1: privileged-adult Haftungsanteil falls back to the necessary Selbstbehalt', () => {
+    // Hand-computed from the 2026 table and SPEC §6.3–6.8 (decision 1).
+    //
+    // Facts: N = 2.000, otherParentNetto = 1.900, one privileged adult aged 19
+    // at home (not ownHousehold), erwerbstätig, no deductions, no Warmmiete,
+    // no child income, anzahlBerechtigter = 1, gruppenverschiebung = 0.
+    //
+    // 6.1  N = 2.000.
+    // 6.2  G_base = 1 (bracket 0–2.100).
+    // 6.3  G_adj = 1 + (2 − 1) = 2, unused: the adult’s Bedarf group is
+    //      G_combined of N + otherParentNetto = 2.000 + 1.900 = 3.900
+    //      → group 6 (3.701–4.100), ohne Höher-/Herabstufung.
+    //
+    // 6.4–6.5 and 6.6 (BKB), starting at group 6. Kindergeld is the full
+    // 259,00 (age ≥ 18). Official 18+ cells:
+    //
+    //   group  Bedarf  Restbedarf (= Bedarf − 259)  remaining (= 2.000 − Rest)  BKB    test
+    //   6      894     635                          1.365                       2.150  1.365 < 2.150 → drop
+    //   5      838     579                          1.421                       2.050  1.421 < 2.050 → drop
+    //   4      803     544                          1.456                       1.950  1.456 < 1.950 → drop
+    //   3      768     509                          1.491                       1.850  1.491 < 1.850 → drop
+    //   2      733     474                          1.526                       1.750  1.526 < 1.750 → drop
+    //   1      698     439                          1.561                       1.450  1.561 ≥ 1.450 → stop
+    //
+    // After BKB: groupUsed = 1, Restbedarf = 439,00, bkbSteps = 5.
+    //
+    // 6.8 Haftungsanteil, sockel (decision 1). Group-1 Restbedarf of this
+    // child (same 698 − 259) is 439,00. Capacities above the appropriate
+    // Selbstbehalt 1.750:
+    //   capacity_P = max(0, 2.000 − 1.750) = 250
+    //   capacity_O = max(0, 1.900 − 1.750) = 150
+    //   sum = 400  <  439  → both parents fall back to the necessary
+    //   Selbstbehalt 1.450 (erwerbstätig).
+    // Capacities at 1.450:
+    //   capacity_P = 2.000 − 1.450 = 550
+    //   capacity_O = 1.900 − 1.450 = 450
+    //   sum = 1.000
+    // Share = Restbedarf × 550 / 1.000 = 439 × 550 / 1.000 = 241,45
+    // (exact to the cent; commercial rounding does not change it).
+    // Cap: Zahlbetrag from this parent’s income alone at G_base = 1
+    // (ohne Höher-/Herabstufung) = 698 − 259 = 439,00; 241,45 < 439, not binding.
+    //
+    // 6.7  Privileged adult is Rang 1 → notwendiger SB 1.450.
+    // masse_1 = max(0, 2.000 − 1.450) = 550 ≥ 241,45 → full share, no Mangelfall.
+    // Expected: haftungsanteil = zahlbetrag = 241,45, haftungsanteilUnknown = false.
+    const r = calc({
+      monthlyNetto: 2000,
+      otherParentNetto: 1900,
+      children: [child(19, { privilegedAdult: true })],
+    });
+    expect(r.groupBase).toBe(1);
+    expect(r.children[0].groupUsed).toBe(1);
+    expect(r.children[0].rank).toBe(1);
+    expect(r.bkbSteps).toBe(5);
+    expectEuro(r.children[0].bedarf, '698.00', 'group-1 Bedarf 18+');
+    expectEuro(r.children[0].restBedarf, '439.00', '698 − 259');
+    expect(r.children[0].haftungsanteilUnknown).toBe(false);
+    expectEuro(r.children[0].haftungsanteil!, '241.45', 'share after sockel fallback');
+    expectEuro(r.children[0].zahlbetrag, '241.45', 'zahlbetrag');
+    expectEuro(r.sumZahlbetrag, '241.45', 'sum');
+    expect(r.mangelfall).toBe(false);
+  });
+
+  it('D8: adults-only BKB re-tests against the lowered adult table group', () => {
+    // Hand-computed from the 2026 table and SPEC §6.6 (decision 8).
+    //
+    // Facts: N = 2.950, two non-privileged adults at home (ages 22 and 25),
+    // no otherParentNetto, erwerbstätig, no deductions, no Warmmiete,
+    // anzahlBerechtigter = 2, gruppenverschiebung = 0. No minors, so the
+    // BKB comparison is the adult table group (starts as G_base; after a
+    // drop, the lowered group — not the original G_base).
+    //
+    // 6.1  N = 2.950.
+    // 6.2  G_base = 4 (bracket 2.901–3.300). G_adj = 4 + (2 − 2) = 4,
+    //      unused for at-home adults (Nr. 13.1: ohne Höher-/Herabstufung).
+    //      Adult group starts at G_base = 4.
+    //
+    // Official 18+ cells and BKB (groups 2–4, erwerbstätig):
+    //   group  Bedarf  Restbedarf (= Bedarf − 259)  BKB
+    //   4      803     544                          1.950
+    //   3      768     509                          1.850
+    //   2      733     474                          1.750
+    //
+    // Provisional (group 4): Restbedarf 544 × 2 = 1.088.
+    // remaining = 2.950 − 1.088 = 1.862  <  BKB 1.950  → drop every
+    // table-based group in use (the adult group) by 1, to group 3.
+    //
+    // After the drop (group 3): Restbedarf 509 × 2 = 1.018.
+    // remaining = 2.950 − 1.018 = 1.932.
+    // Decision 8: re-test against the BKB of the current (lowered) group 3,
+    // which is 1.850.  1.932 ≥ 1.850  → stop at group 3.  bkbSteps = 1.
+    //
+    // (If the comparison kept the original G_base BKB of 1.950, 1.932 < 1.950
+    // would drop again to group 2, Restbedarf 474 × 2 = 948, remaining
+    // 2.002 ≥ 1.950, and each Zahlbetrag would be 474,00 — a different result.)
+    //
+    // 6.8  otherParentNetto is not entered: haftungsanteilUnknown = true,
+    // zahlbetrag reported as Restbedarf 509,00 (upper reference).
+    //
+    // 6.7  Only Rang-4 children → angemessener SB 1.750.
+    // masse_4 = max(0, 2.950 − 1.750) = 1.200  ≥  need 1.018  → full
+    // Restbedarf each, no Mangelfall.
+    // Expected: groupUsed = 3, each zahlbetrag = 509,00, Summe 1.018,00,
+    // BKB of the final comparison group = 1.850,00.
+    const r = calc({
+      monthlyNetto: 2950,
+      children: [child(22), child(25)],
+    });
+    expect(r.groupBase).toBe(4);
+    expect(r.groupAdjusted).toBe(4);
+    expect(r.bkbSteps).toBe(1);
+    expect(r.children[0].groupUsed).toBe(3);
+    expect(r.children[1].groupUsed).toBe(3);
+    expect(r.children[0].rank).toBe(4);
+    expect(r.children[1].rank).toBe(4);
+    expectEuro(r.bkb, '1850.00', 'BKB of lowered group 3, not original group 4');
+    expectEuro(r.children[0].bedarf, '768.00', 'group-3 Bedarf 18+');
+    expectEuro(r.children[1].bedarf, '768.00', 'group-3 Bedarf 18+');
+    expectEuro(r.children[0].restBedarf, '509.00', '768 − 259');
+    expectEuro(r.children[1].restBedarf, '509.00', '768 − 259');
+    expectEuro(r.children[0].zahlbetrag, '509.00', 'adult 22');
+    expectEuro(r.children[1].zahlbetrag, '509.00', 'adult 25');
+    expectEuro(r.sumZahlbetrag, '1018.00', 'sum');
+    expect(r.children[0].haftungsanteilUnknown).toBe(true);
+    expect(r.children[1].haftungsanteilUnknown).toBe(true);
+    expect(r.mangelfall).toBe(false);
+  });
+});
+
