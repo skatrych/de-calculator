@@ -31,6 +31,12 @@ import {
   shouldResetKfbZaehler,
   validateKfbZaehler,
 } from './kfb-zaehler.ts';
+import {
+  applyNettoTransfer,
+  initKindesunterhalt,
+  offerDefaultNetto,
+  type NettoTransfer,
+} from './kindesunterhalt-ui.ts';
 
 const form = document.getElementById('calc-form') as HTMLFormElement;
 const gewinnFields = document.getElementById('gewinn-fields') as HTMLElement;
@@ -65,6 +71,72 @@ const sticky = document.getElementById('sticky-netto') as HTMLElement;
 const stickyValue = document.getElementById('sticky-netto-value') as HTMLElement;
 const stickyLabel = document.getElementById('sticky-netto-label') as HTMLElement;
 const stickySub = document.getElementById('sticky-netto-sub') as HTMLElement;
+
+let lastTransfer: NettoTransfer | null = null;
+
+const VIEW_TITLE = {
+  netto: 'Netto-Einkommen für Selbständige',
+  unterhalt: 'Kindesunterhalt nach der Düsseldorfer Tabelle',
+} as const;
+const VIEW_LEAD = {
+  netto:
+    'Schätzung nach den gesetzlichen Regeln der Jahre 2023–2026. Standard: Dreijahresdurchschnitt der letzten abgeschlossenen Jahre.',
+  unterhalt:
+    'Schätzung nach der Düsseldorfer Tabelle 2026 (OLG Düsseldorf, Stand 01.01.2026) und den Leitlinien NRW 2026. Residenzmodell.',
+} as const;
+
+export function setView(view: 'netto' | 'unterhalt'): void {
+  const viewNetto = document.getElementById('view-netto') as HTMLElement;
+  const viewUh = document.getElementById('view-unterhalt') as HTMLElement;
+  const navNetto = document.getElementById('nav-netto') as HTMLElement;
+  const navUh = document.getElementById('nav-unterhalt') as HTMLElement;
+  const isNetto = view === 'netto';
+  viewNetto.classList.toggle('is-hidden', !isNetto);
+  viewUh.classList.toggle('is-hidden', isNetto);
+  if (isNetto) {
+    viewNetto.removeAttribute('hidden');
+    viewUh.setAttribute('hidden', '');
+    navNetto.setAttribute('aria-current', 'page');
+    navUh.removeAttribute('aria-current');
+  } else {
+    viewUh.removeAttribute('hidden');
+    viewNetto.setAttribute('hidden', '');
+    navUh.setAttribute('aria-current', 'page');
+    navNetto.removeAttribute('aria-current');
+  }
+  const title = document.getElementById('page-title');
+  const lead = document.getElementById('page-lead');
+  if (title) title.textContent = VIEW_TITLE[view];
+  if (lead) lead.textContent = VIEW_LEAD[view];
+  document.title = VIEW_TITLE[view];
+  const dSteuer = document.getElementById('disclaimer-steuer') as HTMLElement | null;
+  const dUh = document.getElementById('disclaimer-unterhalt') as HTMLElement | null;
+  if (dSteuer) dSteuer.hidden = !isNetto;
+  if (dUh) dUh.hidden = isNetto;
+  if (!isNetto) offerDefaultNetto();
+}
+
+function transferButton(monthly: NettoTransfer['monthly'], fromAverage: boolean): HTMLElement {
+  const wrap = el('p', { className: 'transfer-wrap' });
+  const btn = el('button', {
+    className: 'btn-transfer',
+    text: fromAverage
+      ? 'Dieses monatliche Durchschnitts-Netto für Kindesunterhalt verwenden'
+      : 'Dieses monatliche Netto für Kindesunterhalt verwenden',
+    attrs: { type: 'button', id: fromAverage ? 'uh-transfer-average' : 'uh-transfer-single' },
+  });
+  btn.addEventListener('click', () => applyNettoTransfer({ monthly, fromAverage }));
+  wrap.append(btn);
+  if (!fromAverage) {
+    wrap.append(
+      el('p', {
+        className: 'hint',
+        text: 'Gerichte legen in der Regel den Durchschnitt von drei Jahren zugrunde.',
+      }),
+    );
+  }
+  return wrap;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -552,6 +624,7 @@ function renderYearResult(r: YearResult, headlineTitle: string): HTMLElement {
   head.append(el('div', { className: 'amount', text: formatEuro(r.nettoAnnual) }));
   head.append(el('p', { className: 'sub', text: `${formatEuro(r.nettoMonthly)}  ·  Monat` }));
   wrap.append(head);
+  wrap.append(transferButton(r.nettoMonthly, false));
   const rates = el('div', { className: 'rates' });
   const e1 = el('dl', { className: 'rate-card' });
   e1.append(el('dt', { text: 'Effektive Gesamtbelastung' }), el('dd', { text: formatPercent(r.effectiveBurdenPercent) }));
@@ -574,6 +647,7 @@ function renderAverage(r: MultiYearResult): HTMLElement {
   head.append(el('div', { className: 'amount', text: formatEuro(r.avg_netto) }));
   head.append(el('p', { className: 'sub', text: `${formatEuro(r.avg_monthly)}  ·  Dreijahresdurchschnitt (Monat)` }));
   wrap.append(head);
+  wrap.append(transferButton(r.avg_monthly, true));
 
   const label = el('p', { className: 'avg-label' });
   label.append(el('strong', { text: 'Dreijahresdurchschnitt' }));
@@ -759,6 +833,7 @@ function recalc(): void {
       return;
     }
     showErrors([]);
+    lastTransfer = { monthly: outcome.result.avg_monthly, fromAverage: true };
     resultsBody.replaceChildren(renderAverage(outcome.result));
     hide(resultsBody, false);
     hide(resultsPlaceholder, true);
@@ -771,6 +846,7 @@ function recalc(): void {
       return;
     }
     showErrors([]);
+    lastTransfer = { monthly: outcome.result.nettoMonthly, fromAverage: false };
     resultsBody.replaceChildren(renderYearResult(outcome.result, `Netto-Einkommen (Jahr) · ${outcome.result.year}`));
     hide(resultsBody, false);
     hide(resultsPlaceholder, true);
@@ -794,6 +870,13 @@ function init(): void {
   rebuildGewinnFields();
   rebuildOverrideFields();
   updateVisibility();
+
+  initKindesunterhalt({
+    getTransfer: () => lastTransfer,
+    setView,
+  });
+  document.getElementById('nav-netto')?.addEventListener('click', () => setView('netto'));
+  document.getElementById('nav-unterhalt')?.addEventListener('click', () => setView('unterhalt'));
 
   form.addEventListener('click', (event) => {
     const target = event.target;
