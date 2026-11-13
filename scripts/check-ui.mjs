@@ -388,6 +388,78 @@ try {
     console.log('Kindesunterhalt G5 and adult flags: ok (Mangelfall cents, flags, mutual exclusion)');
   }
 
+  // --- F1: clearing #uh-netto resets override; next nav prefills again ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    const avgLabel = page.locator('label[for="mode-avg"]');
+    if (await avgLabel.count()) await avgLabel.click();
+    await page.waitForSelector('#gewinn-2023');
+    await page.fill('#gewinn-2023', '80.000');
+    await page.fill('#gewinn-2024', '80.000');
+    await page.fill('#gewinn-2025', '80.000');
+    await page.waitForSelector('.headline .amount');
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    await page.waitForFunction(() => document.getElementById('uh-netto')?.value.trim() !== '');
+    const prefilled = await page.inputValue('#uh-netto');
+    assert(prefilled.length > 0, `F1: first nav should prefill, got "${prefilled}"`);
+
+    // Clear (empty), navigate away and back → prefilled again.
+    await page.fill('#uh-netto', '');
+    assert((await page.inputValue('#uh-netto')) === '', 'F1: field should be empty after clear');
+    await page.locator('#nav-netto').click();
+    await page.waitForSelector('#calc-form');
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    await page.waitForFunction(() => document.getElementById('uh-netto')?.value.trim() !== '');
+    const afterEmpty = await page.inputValue('#uh-netto');
+    assert(afterEmpty === prefilled, `F1: after clear+nav, expected ${prefilled}, got ${afterEmpty}`);
+
+    // Whitespace-only clear, same refill on nav.
+    await page.fill('#uh-netto', '   ');
+    await page.locator('#nav-netto').click();
+    await page.waitForSelector('#calc-form');
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    await page.waitForFunction(() => document.getElementById('uh-netto')?.value.trim() !== '');
+    const afterWs = await page.inputValue('#uh-netto');
+    assert(afterWs === prefilled, `F1: after whitespace+nav, expected ${prefilled}, got ${afterWs}`);
+
+    // A typed override still sticks across navigation.
+    await page.fill('#uh-netto', '5.000');
+    await page.locator('#nav-netto').click();
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-netto');
+    const afterTyped = await page.inputValue('#uh-netto');
+    assert(afterTyped === '5.000', `F1: typed 5.000 must stick, got ${afterTyped}`);
+
+    await page.close();
+    console.log('F1: ok (clear and whitespace refill on nav; typed override sticks)');
+  }
+
+  // --- N1: adults-only Masse ≤ 0 shows Mangelfall in the result subtitle ---
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.locator('#nav-unterhalt').click();
+    await page.waitForSelector('#uh-child-0-age');
+    await page.fill('#uh-netto', '1750');
+    await page.fill('#uh-child-0-age', '22');
+    await page.waitForSelector('#uh-results-body .amount');
+    const body = await page.locator('#uh-results-body').innerText();
+    const sub = (await page.locator('#uh-results-body .sub').innerText()).trim();
+    const amount = (await page.locator('#uh-results-body .amount').innerText()).replace(/\s/g, '');
+    assert(amount.includes('0,00'), `N1: Zahlbetrag should be 0,00, got ${amount}`);
+    assert(
+      /\bMangelfall\b/.test(sub),
+      `N1: result subtitle should say Mangelfall, got "${sub}"`,
+    );
+    assert(/\bMangelfall\b/.test(body), 'N1: results body should mention Mangelfall');
+    await page.close();
+    console.log('N1: ok (adults-only Masse 0 subtitle includes Mangelfall)');
+  }
+
   // Desktop form screenshot for the PR (Netto, unchanged path)
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
@@ -436,7 +508,7 @@ try {
 
   await browser.close();
   server.close();
-  console.log('\ncheck:ui: ok (L1, L2, age-field, issue 5, Kindesunterhalt transfer/G1/G5).');
+  console.log('\ncheck:ui: ok (L1, L2, age-field, issue 5, Kindesunterhalt transfer/G1/G5, F1, N1).');
 } catch (err) {
   console.error('check:ui FAILED:', err);
   process.exit(1);

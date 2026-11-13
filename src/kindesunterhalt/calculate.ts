@@ -299,6 +299,9 @@ function applyLeistungsfaehigkeit(
       rang4.forEach((k, i) => {
         k.zahlbetrag = parts[i];
       });
+      // Adults-only, nothing left to share (Masse ≤ 0): same Mangelfall
+      // flag as Rang-1 at or below the necessary Selbstbehalt (N1).
+      if (rang1.length === 0 && masse4.lte(0)) mangelfall = true;
     }
     // else: already at their post-Haftungsanteil need.
   }

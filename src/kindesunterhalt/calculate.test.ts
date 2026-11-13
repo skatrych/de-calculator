@@ -325,6 +325,20 @@ describe('additional required tests (SPEC §12)', () => {
     expect(r.mangelfall).toBe(true);
   });
 
+  it('N1: adults-only Masse ≤ 0 is Mangelfall with Zahlbetrag 0', () => {
+    const exact = calc({ monthlyNetto: 1750, children: [child(22)] });
+    expectEuro(exact.selbstbehaltApplied, '1750.00', 'angemessener SB');
+    expectEuro(exact.children[0].zahlbetrag, '0.00', 'exact SB');
+    expectEuro(exact.sumZahlbetrag, '0.00', 'sum');
+    expect(exact.mangelfall).toBe(true);
+    expect(exact.children[0].rank).toBe(4);
+
+    const below = calc({ monthlyNetto: '1749.99', children: [child(22)] });
+    expectEuro(below.children[0].zahlbetrag, '0.00', 'below SB');
+    expectEuro(below.sumZahlbetrag, '0.00', 'sum');
+    expect(below.mangelfall).toBe(true);
+  });
+
   it('child income that wipes Restbedarf → Zahlbetrag 0', () => {
     const r = calc({ monthlyNetto: 4000, children: [child(8, { childIncome: 1000 })] });
     expectEuro(r.children[0].restBedarf, '0.00', 'wiped');

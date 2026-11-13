@@ -532,7 +532,12 @@ export function initKindesunterhalt(viewHost: UnterhaltViewHost): void {
     const t = event.target;
     if (t === anzahlInput()) anzahlTouched = anzahlInput().value.trim() !== '';
     if (t === nettoInput()) {
-      monthlyOverridden = true;
+      // F1: clearing (empty or whitespace) drops the override so the next
+      // navigation can prefill from the in-memory Netto figure again.
+      // A typed non-empty value still sticks across navigation.
+      const empty = nettoInput().value.trim() === '';
+      monthlyOverridden = !empty;
+      if (empty) setSourceNote(null, false);
     }
     if (t instanceof HTMLInputElement && t.dataset.role === 'age') {
       const id = t.id; // uh-child-N-age
